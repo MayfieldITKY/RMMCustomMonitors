@@ -9,7 +9,11 @@ $winBupDrive = Get-WmiObject -Class Win32_logicaldisk -Filter "DeviceID = '$winB
 $winBupDriveContents = $winBupDriveLetter | Get-ChildItem
 $revisions = (Get-WBSummary).LastBackupTarget | Get-ChildItem | Where-Object {$_.Name -like "*WindowsImageBackup*"}
 
+# If there are no recent errors, get data about revisions and drive space
 Write-Host "Checking internal backup drive..."
+$winBupRecentFailure = $false
+$winBupErrors = Get-WBJob -previous 4 | Where-Object {$_.HResult -ne "0"}
+if ($winBupErrors.length -gt 0) {$winBupRecentFailure = $true}
 [array] $revisionSizes = foreach ($rev in $revisions) {Get-ChildItem $winBupDriveLetter\$rev -Recurse | Measure-Object -property length -sum}
 $revisionTypicalSize = ($revisionSizes.Sum | Measure-Object -Average)
 $revisionTypicalSizeGB = "{0:N2} GB" -f (($revisionSizes.Sum | Measure-Object -Average).Average / 1GB)
@@ -22,9 +26,7 @@ $notenoughSpace = $false
 if ($winBupDrive.FreeSpace -lt ($revisionTypicalSize.Average) * 0.1) {$notenoughSpace = $true}
 $nonBupData = $false
 if ($winBupDriveContents.Length -gt $revisions.Length) {$nonBupData = $true}
-$winBupRecentFailure = $false
-$winBupErrors = Get-WBJob -previous 4 | Where-Object {$_.HResult -ne "0"}
-if ($winBupErrors.length -gt 0) {$winBupRecentFailure = $true}
+
 
 
 $bupDriveAssessment = ""
