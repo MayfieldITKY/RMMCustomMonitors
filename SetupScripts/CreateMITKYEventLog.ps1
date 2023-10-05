@@ -3,5 +3,5 @@
 if (Get-WinEvent -LogName MITKY) {
     Write-Output "Event Log for MITKY already exists."
 } else {
-    New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'CW RMM'
+    New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'RMM'
 }
