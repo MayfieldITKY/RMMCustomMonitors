@@ -1,5 +1,6 @@
-# Check for Shadow Copies on Server Hosts
-# Checks for existing shadow copies and outputs if they are present
+# Checks for shadow copies on host server.
+# Runs as a scheduled task and writes status to MITKY Event Log.
+# RMM monitors this log and alerts if shadow copies are found.
 
 if (Get-WmiObject Win32_ShadowCopy) {
   $params = @{
