@@ -7,6 +7,8 @@ OVERVIEW
 
 SERVER SETUP
 
+
+
 SCRIPT UPDATES
 -Check for updates from GitHub, compare filehash for security
 -Update expected filehashes from Datto
