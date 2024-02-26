@@ -1,3 +1,4 @@
+# ============== MONITORING TASK: CHECK FOR HYPER-V CHECKPOINTS ================
 # Checks for Hyper-V Checkpoints on server hosts. Excludes RDC and TESTING VMs.
 # Runs as a scheduled task and writes status to Event Log.
 # RMM monitors this log and alerts if checkpoints are found.
