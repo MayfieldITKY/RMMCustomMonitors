@@ -2,6 +2,15 @@
 # Runs as a scheduled task and writes status to MITKY Event Log.
 # RMM monitors this log and alerts if not enough revisions are found.
 
+# 
+
+
+
+
+
+
+
+<#
 # Get information about Windows Server Backup schedule and contents of backup drive.
 Write-Host "Checking Windows Server Backup..."
 $winBupDriveLetter = (Get-WBSummary).LastBackupTarget
@@ -58,4 +67,4 @@ $bupDriveAssessment = "<p id='Text'>The drive is getting full. It may be necessa
 if  ($winBupRecentFailure -eq $true) {
     $bupDriveAssessment = "<p id='ErrorText'>Cannot assess revisions on backup drive due to recent Windows Server Backup failures. Revision size estimate is probably wrong!</p>"
 }
-
+#>
