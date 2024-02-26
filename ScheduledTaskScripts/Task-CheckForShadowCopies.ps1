@@ -1,6 +1,7 @@
-# Checks for shadow copies on host server.
-# Runs as a scheduled task and writes status to MITKY Event Log.
-# RMM monitors this log and alerts if shadow copies are found.
+# ================ MONITORING TASK: CHECK FOR SHADOW COPIES ==================
+# Checks for shadow copies on host server. Runs as a scheduled task and writes
+# status to MITKY Event Log. RMM should monitor this log and alerts if shadow 
+# copies are found.
 
 if (Get-WmiObject Win32_ShadowCopy) {
   $params = @{
