@@ -2,6 +2,21 @@
 # Runs as a scheduled task and writes status to Event Log.
 # RMM monitors this log and alerts if checkpoints are found.
 
+try {Get-VM}
+catch {
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Warning"
+            EventId = 1000
+            Message = "No Virtual Machines were detected or the Get-VM cmdlet failed! Check if Hyper-V is enabled for this server or if VMs should be present."
+        }
+        
+        Write-EventLog @params
+        exit
+}
+
+
 $checkpoints = Get-VM * | Where-Object{$_.Name -notlike "*RDC*" -and $_.Name -notlike "*test*"} | ForEach-Object {Get-VMCheckpoint -VMName $_.Name}
 
 if ($checkpoints) {
