@@ -22,9 +22,9 @@ If (-Not($LastWSBSuccessEvent)) {
   }
 
 
-# If the last backup was successful, attempt to rotate revisions:
 # Check that there are revisions. If not, Windows Server Backup may not be configured
 # or there could be a problem with the backup drive.
+
 
 If (-Not()) {
   $params = @{
@@ -37,6 +37,7 @@ If (-Not()) {
   Write-EventLog @params
   exit
 }
+
 
 # Check that the last backup can be renamed. If not, another process may have the
 # folder or files open and revisions should not be rotated.
@@ -54,6 +55,7 @@ If (-Not()) {
   exit
 }
 
+
 # Check that there is enough space for revisions. If not, delete the oldest revision.
 If (-Not()) {
   $params = @{
@@ -66,6 +68,7 @@ If (-Not()) {
   Write-EventLog @params
   exit
 }
+
 
 # Rotate revisisons.
 
@@ -81,5 +84,3 @@ If () {
   Write-EventLog @params
   exit
 }
-
-# Report results to the event log.
