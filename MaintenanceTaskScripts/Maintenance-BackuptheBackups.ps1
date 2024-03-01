@@ -7,13 +7,13 @@
 # Check for successful backup. Do not change revisions if the most recent
 # backup was not successful.
 $LastWSBDate = (Get-Date).AddHours(-24)
-$SuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
+$LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
 
-If (-Not($SuccessEvent)) {
+If (-Not($LastWSBSuccessEvent)) {
     $params = @{
       LogName = "MITKY"
       Source = "Maintenance Tasks"
-      EntryType = "Information"
+      EntryType = "Error"
       EventId = 8101
       Message = "The last Windows Server Backup was not successful! No revisions were changed."
     }
@@ -23,15 +23,63 @@ If (-Not($SuccessEvent)) {
 
 
 # If the last backup was successful, attempt to rotate revisions:
+# Check that there are revisions. If not, Windows Server Backup may not be configured
+# or there could be a problem with the backup drive.
+
+If (-Not()) {
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Critical"
+    EventId = 8100
+    Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
+  }
+  Write-EventLog @params
+  exit
+}
+
 # Check that the last backup can be renamed. If not, another process may have the
 # folder or files open and revisions should not be rotated.
 
 
-# Check that there is enough space for revisions. If not, delete the oldest revision.
+If (-Not()) {
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Error"
+    EventId = 8102
+    Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
+  }
+  Write-EventLog @params
+  exit
+}
 
+# Check that there is enough space for revisions. If not, delete the oldest revision.
+If (-Not()) {
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Warning"
+    EventId = 8103
+    Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
+  }
+  Write-EventLog @params
+  exit
+}
 
 # Rotate revisisons.
 
-
+If () {
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Information"
+    EventId = 8109
+    Message = "Backup revisions were successfully rotated.
+    "
+  }
+  Write-EventLog @params
+  exit
+}
 
 # Report results to the event log.
