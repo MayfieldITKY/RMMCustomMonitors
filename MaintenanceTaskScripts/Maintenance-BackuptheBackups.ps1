@@ -14,7 +14,7 @@ If (-Not($SuccessEvent)) {
       LogName = "MITKY"
       Source = "Maintenance Tasks"
       EntryType = "Information"
-      EventId = 
+      EventId = 8101
       Message = "The last Windows Server Backup was not successful! No revisions were changed."
     }
     Write-EventLog @params
@@ -22,7 +22,15 @@ If (-Not($SuccessEvent)) {
   }
 
 
-# If the last backup was successful, rotate revisions.
+# If the last backup was successful, attempt to rotate revisions:
+# Check that the last backup can be renamed. If not, another process may have the
+# folder or files open and revisions should not be rotated.
+
+
+# Check that there is enough space for revisions. If not, delete the oldest revision.
+
+
+# Rotate revisisons.
 
 
 
