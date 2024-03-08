@@ -84,12 +84,19 @@ If (-Not($enoughSpace)) {
   $wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
   $howManyRevisions = $wsbRevisions.Length
   $oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
+
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Warning"
+    EventId = 8104
+    Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
+  }
+  Write-EventLog @params
 }
 
 
 # Rotate revisisons.
-
-
 try {
   Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
   Start-Sleep 10
@@ -105,8 +112,6 @@ try {
       Rename-Item $wsbDrive\WindowsImageBackup -NewName "WindowsImageBackup_old"
       Start-Sleep 10
   }
-
-
 }
 catch {
   $params = @{
@@ -120,24 +125,17 @@ catch {
   exit
 }
 
-
-
-$params = @{
-  LogName = "MITKY"
-  Source = "Maintenance Tasks"
-  EntryType = "Information"
-  EventId = 8109
-  Message = "Backup revisions were successfully rotated.
-  "
-  }
-  Write-EventLog @params
-  exit
-
-$params = @{
-  LogName = "MITKY"
-  Source = "Maintenance Tasks"
-  EntryType = "Warning"
-  EventId = 8104
-  Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
+# If rotation was successful and the number of revisions was not reduced,
+# write success event to log MITKY.
+If ($enoughSpace) {
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Information"
+    EventId = 8109
+    Message = "Backup revisions were successfully rotated.
+    "
+    }
+    Write-EventLog @params
+    exit
 }
-Write-EventLog @params
