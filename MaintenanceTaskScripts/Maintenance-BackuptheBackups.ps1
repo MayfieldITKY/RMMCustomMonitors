@@ -73,6 +73,7 @@ catch {
 # less than four revisions, add one if there is room. If there may not be room for
 # the current number of revisions, decrease the number of revisions by one.
 $oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
+$protectOldestRevision = $false
 $revisionSizes = foreach ($rev in $wsbRevisions) {Get-ChildItem $wsbDrive\$rev -Recurse | Measure-Object -property length -sum}
 $revisionTypicalSize = ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
 $wsbDriveFreeSpace = (Get-PSDrive -Name ($wsbDrive.Replace(":",""))).Free / 1GB
@@ -80,7 +81,10 @@ $enoughSpace = $false
 If ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 1.15)) {$enoughSpace = $true}
 
 # Check if another revision is needed and add one if there is space.
-If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 2.3))) {$howManyRevisions += 1}
+If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 2.3))) {
+  $howManyRevisions += 1
+  $protectOldestRevision = $true
+}
 
 # Reduce the number of revisions if needed.
 If (-Not($enoughSpace)) {
@@ -102,7 +106,9 @@ If (-Not($enoughSpace)) {
 
 # Rotate revisisons.
 try {
-  Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
+  If (-Not($protectOldestRevision)) {
+    Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
+  }
   Start-Sleep 10
   If ($howManyRevisions -gt 3) {
       Rename-Item $wsbDrive\WindowsImageBackup_older -NewName "WindowsImageBackup_oldest"
