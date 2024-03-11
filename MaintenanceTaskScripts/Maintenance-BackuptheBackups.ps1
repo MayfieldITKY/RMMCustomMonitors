@@ -1,8 +1,10 @@
 # ================ MAINTENANCE TASK: BACKUP THE BACKUPS ==================
 # Creates and rotates revisions of Windows Server Backups on host servers.
 # Checks that the recent backup is successful before updating revisions.
-# This should replace the old backup_the_backups.bat script that creates 
-# revisions without checking for successful backup.
+# Checks that there is enough space for revisions and changes the number of
+# revisions as needed (target is four revisions). This should replace the old
+# backup_the_backups.bat script that creates revisions without checking for
+# successful backup.
 
 
 # Common variables
