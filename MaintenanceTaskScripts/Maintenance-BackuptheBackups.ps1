@@ -86,6 +86,15 @@ If ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 1.15)) {$enoughSpace = $true}
 If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 2.3))) {
   $howManyRevisions += 1
   $protectOldestRevision = $true
+
+  $params = @{
+    LogName = "MITKY"
+    Source = "Maintenance Tasks"
+    EntryType = "Information"
+    EventId = 8110
+    Message = "There were less than four backup revisions. An additional revision was scheduled."
+  }
+  Write-EventLog @params
 }
 
 # Reduce the number of revisions if needed.
