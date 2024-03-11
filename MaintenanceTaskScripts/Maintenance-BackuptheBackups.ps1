@@ -69,16 +69,20 @@ catch {
 
 
 # Check that there is enough space for revisions. Do some math first: get average
-# size of current revisions, get free space left on backup drive, then see if there
-# is room for a revision up to 15% larger. If not, decrease the number of revisions
-# by one.
+# size of current revisions and get free space left on backup drive. If there are 
+# less than four revisions, add one if there is room. If there may not be room for
+# the current number of revisions, decrease the number of revisions by one.
 $oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
 $revisionSizes = foreach ($rev in $wsbRevisions) {Get-ChildItem $wsbDrive\$rev -Recurse | Measure-Object -property length -sum}
 $revisionTypicalSize = ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
 $wsbDriveFreeSpace = (Get-PSDrive -Name ($wsbDrive.Replace(":",""))).Free / 1GB
 $enoughSpace = $false
-
 If ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 1.15)) {$enoughSpace = $true}
+
+# Check if another revision is needed and add one if there is space.
+If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 2.3))) {$howManyRevisions += 1}
+
+# Reduce the number of revisions if needed.
 If (-Not($enoughSpace)) {
   Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
   $wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
