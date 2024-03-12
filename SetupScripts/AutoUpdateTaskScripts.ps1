@@ -1,3 +1,4 @@
+# ======================== SETUP TASK: UPDATE SCRIPTS ========================
 # Checks for new or updated scripts from GitHub repository.
 # Downloads updates and creates new Scheduled Tasks if needed.
 
