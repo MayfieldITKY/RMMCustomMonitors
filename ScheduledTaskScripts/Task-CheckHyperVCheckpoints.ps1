@@ -18,7 +18,7 @@ catch {
 }
 
 
-$checkpoints = Get-VM * | Where-Object{$_.Name -notlike "*RDC*" -and $_.Name -notlike "*test*"} | ForEach-Object {Get-VMCheckpoint -VMName $_.Name}
+$checkpoints = Get-VM * | Where-Object{$_.Name -notlike "*test*"} | ForEach-Object {Get-VMCheckpoint -VMName $_.Name}
 
 if ($checkpoints) {
     $params = @{
