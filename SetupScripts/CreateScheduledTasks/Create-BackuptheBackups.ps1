@@ -22,7 +22,7 @@ $taskTriggerTime = $taskTriggerTime.ToString("HH:mm")
 
 # Create the new task
 $pathToScript = "C:\Scripts\RMMCustomMonitors\MaintenanceTaskScripts\Maintenance-BackuptheBackups.ps1"
-$arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass –File $pathToScript"
+$arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $TaskName = "MITKY - Backup the Backups"
 $taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily
 $User = "NT AUTHORITY\SYSTEM"
