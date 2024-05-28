@@ -17,10 +17,10 @@ $taskTrigger = New-ScheduledTaskTrigger -Once -At $taskTriggerTime
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $principal = New-ScheduledTaskPrincipal -GroupID "BUILTIN\Users"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
-$taskPath = "Mayfield IT"
+$taskPath = "\Mayfield IT\"
 
 # Create the scheduled task
-Register-ScheduledTask -TaskName $newTaskName -Trigger $taskTrigger -Principal $principal -Action $Action -TaskPath $taskPath
+Register-ScheduledTask -TaskName $newTaskName  -TaskPath $taskPath -Trigger $taskTrigger -Principal $principal -Action $Action
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
