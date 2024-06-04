@@ -101,7 +101,7 @@ if ($allShadowsCleared) {
     $params = @{
         LogName = "MITKY"
         Source = "Scheduled Tasks"
-        EntryType = "Information"
+        EntryType = "Error"
         EventId = 1061
         Message = "Shadow copies were found on host server and could not be cleared!"
     }
