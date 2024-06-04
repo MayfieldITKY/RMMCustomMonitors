@@ -63,7 +63,7 @@ $updateNeeded = $true
 If (Get-ChildItem -Path C:\scripts -Attributes Directory | Where-Object {$_.Name -like "RMMCustomMonitors"}) {
     $lastUpdateHash = Get-Content -Path "$scriptsDestination\LastUpdateHash.txt"
     If ($lastUpdateHash -eq $updateHash.Hash) {$updateNeeded = $false}
-    Write-Output "There are updated files. Proceeding..."
+    else {Write-Output "There are updated files. Proceeding..."}
 }
 
 If (-Not($updateNeeded)) {
