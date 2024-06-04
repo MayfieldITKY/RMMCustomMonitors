@@ -14,13 +14,13 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
 $pathToScript = "C:\Scripts\RMMCustomMonitors\MaintenanceTaskScripts\Maintenance-CheckandClearShadowCopies.ps1"
 $newTaskName = "MITKY - Check and Clear Shadow Copies"
 $taskTriggerTime = "08:30"
-$taskTrigger = -At $taskTriggerTime -Daily
+$taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily
 
 # DO NOT CHANGE THESE VARIABLES
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
-$taskPath = "Mayfield IT"
+$taskPath = "MayfieldIT"
 
 # CREATES THE SCHEDULED TASK
 Register-ScheduledTask -TaskName $newTaskName -Trigger $taskTrigger -User $User -Action $Action -RunLevel Highest -TaskPath $taskPath

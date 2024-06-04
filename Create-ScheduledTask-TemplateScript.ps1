@@ -25,13 +25,13 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
 $pathToScript = "C:\FULL\PATH\TO\SCRIPT.ps1"
 $newTaskName = "MITKY - <TASK NAME>"
 $taskTriggerTime = "HH:mm"
-$taskTrigger = -At $taskTriggerTime -Daily # Other trigger types can be used
+$taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily # Other trigger types can be used
 
 # DO NOT CHANGE THESE VARIABLES
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
-$taskPath = "Mayfield IT"
+$taskPath = "MayfieldIT"
 
 # CREATES THE SCHEDULED TASK
 Register-ScheduledTask -TaskName $newTaskName -Trigger $taskTrigger -User $User -Action $Action -RunLevel Highest -TaskPath $taskPath
