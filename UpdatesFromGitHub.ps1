@@ -1,7 +1,7 @@
 ﻿Write-Output @"
 ================== Deploy Custom Server Monitors from GitHub ==================
 ============================ Mayfield IT Consulting ===========================
-====================== Updated 05/28/2024 by Jason Farris =====================
+====================== Updated 06/10/2024 by Jason Farris =====================
 
 "@
 
@@ -21,6 +21,10 @@ alerts when necessary.
 When creating a deployment job, CONFIRM the branch name is correct in the 
 updateRepository variable. CONFIRM that the line for $updateRepo points to this
 variable and comment out or delete the line for testing.
+
+CONFIRM the variables for targetHostorVM, targetWSB, and targetMaintenance are
+defined correctly when creating a deployment job. The default value for each is
+$false, so nothing will update if these are not defined. 
 #>
 
 
@@ -32,13 +36,21 @@ $updateTempPath = "C:\Scripts\Temp\$updateDate-RMMCustomMonitors"
 $updateFileName = "RMMCustomMonitors.zip"
 $updateFilePath = "$updateTempPath\$updateFileName"
 $scriptsDestination = "C:\Scripts\RMMCustomMonitors"
+
+# ============== DEFINE THESE VARIABLES IN RMM WHEN CREATING JOB ==============
 $updateRepo = $env:updateRepository
 #$updateRepo = "test" # This is used only for testing during development
 $updateRepoFileName = "$updateRepo.zip"
+$updateTarget = $env:targetHostorVM
+$updateWSB = $env:targetWSB
+$updateMaintenance = $env:targetMaintenance
 
 Write-Output @"
 Deployment run on: $runDate
 Deploying branch: $updateRepo
+Deployment target: $updateTarget
+Updating Windows Server Backup: $updateWSB
+Updating Maintenance tasks: $updateMaintenance
 "@
 
 # If the temp path already exists (it should not because it contains the current
