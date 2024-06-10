@@ -1,4 +1,4 @@
-# ================ MAINTENANCE TASK: BACKUP THE BACKUPS ==================
+# ===================== SCHEDULED TASK: BACKUP THE BACKUPS ====================
 # Creates and rotates revisions of Windows Server Backups on host servers.
 # Checks that the recent backup is successful before updating revisions.
 # Checks that there is enough space for revisions and changes the number of
