@@ -24,7 +24,7 @@ If (-Not($LastWSBSuccessEvent)) {
       LogName = "MITKY"
       Source = "Maintenance Tasks"
       EntryType = "Error"
-      EventId = 8101
+      EventId = 2031
       Message = "The last Windows Server Backup was not successful! No revisions were changed."
     }
     Write-EventLog @params
@@ -39,7 +39,7 @@ If (-Not($wsbRevisions)) {
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Critical"
-    EventId = 8100
+    EventId = 2030
     Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
   }
   Write-EventLog @params
@@ -62,7 +62,7 @@ catch {
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Error"
-    EventId = 8102
+    EventId = 2032
     Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
   }
   Write-EventLog @params
@@ -91,7 +91,7 @@ If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Information"
-    EventId = 8110
+    EventId = 2038
     Message = "There were less than four backup revisions. An additional revision was scheduled."
   }
   Write-EventLog @params
@@ -108,7 +108,7 @@ If (-Not($enoughSpace)) {
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Warning"
-    EventId = 8104
+    EventId = 2034
     Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
   }
   Write-EventLog @params
@@ -139,7 +139,7 @@ catch {
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Error"
-    EventId = 8103
+    EventId = 2033
     Message = "Failed to rotate divisions! Check if any revisions are open in another process."
   }
   Write-EventLog @params
@@ -153,7 +153,7 @@ If ($enoughSpace) {
     LogName = "MITKY"
     Source = "Maintenance Tasks"
     EntryType = "Information"
-    EventId = 8109
+    EventId = 2039
     Message = "Backup revisions were successfully rotated.
     "
     }
