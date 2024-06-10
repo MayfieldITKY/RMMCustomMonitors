@@ -22,7 +22,7 @@ $LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Window
 If (-Not($LastWSBSuccessEvent)) {
     $params = @{
       LogName = "MITKY"
-      Source = "Maintenance Tasks"
+      Source = "Scheduled Tasks"
       EntryType = "Error"
       EventId = 2031
       Message = "The last Windows Server Backup was not successful! No revisions were changed."
@@ -37,7 +37,7 @@ If (-Not($LastWSBSuccessEvent)) {
 If (-Not($wsbRevisions)) {
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Critical"
     EventId = 2030
     Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
@@ -60,7 +60,7 @@ try {
 catch { 
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Error"
     EventId = 2032
     Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
@@ -89,7 +89,7 @@ If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize
 
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Information"
     EventId = 2038
     Message = "There were less than four backup revisions. An additional revision was scheduled."
@@ -106,7 +106,7 @@ If (-Not($enoughSpace)) {
 
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Warning"
     EventId = 2034
     Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
@@ -137,7 +137,7 @@ try {
 catch {
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Error"
     EventId = 2033
     Message = "Failed to rotate divisions! Check if any revisions are open in another process."
@@ -151,7 +151,7 @@ catch {
 If ($enoughSpace) {
   $params = @{
     LogName = "MITKY"
-    Source = "Maintenance Tasks"
+    Source = "Scheduled Tasks"
     EntryType = "Information"
     EventId = 2039
     Message = "Backup revisions were successfully rotated.
