@@ -3,6 +3,7 @@
 # Runs as a scheduled task and writes status to Event Log.
 # RMM monitors this log and alerts if checkpoints are found.
 
+# First confirm there are VMs present
 try {Get-VM}
 catch {
         $params = @{
