@@ -1,5 +1,5 @@
 ﻿# ================= CREATE TASK: CHECK AND CLEAR SHADOW COPIES ================
-# Create or update a scheduled task to run Maintenance-CheckandClearShadowCopies.ps1.
+# Create or update a scheduled task to run HOST-CheckandClearShadowCopies.ps1.
 
 # First look for an existing task using the old batch script and disable it
 # $oldTaskNames = @("possible task name", "other task name", "task_name_could_be_this")
@@ -10,10 +10,13 @@
 $taskName = "MITKY - Check and Clear Shadow Copies"
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
 
-# SPECIFY THESE VARIABLES
-$pathToScript = "C:\Scripts\RMMCustomMonitors\MaintenanceTaskScripts\Maintenance-CheckandClearShadowCopies.ps1"
+# SPECIFY THESE VARIABLES - Schedule 1 hour before Windows Server Backup
+$wsbPolicy = Get-WBPolicy
+$wsbTime = Get-WBSchedule -Policy $wsbPolicy
+$taskTriggerTime = $wsbTime.AddMinutes(-30)
+$taskTriggerTime = $taskTriggerTime.ToString("HH:mm")
+$pathToScript = "C:\Scripts\RMMCustomMonitors\HostServerScripts\HOST-CheckandClearShadowCopies.ps1"
 $newTaskName = "MITKY - Check and Clear Shadow Copies"
-$taskTriggerTime = "08:30"
 $taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily
 
 # DO NOT CHANGE THESE VARIABLES
