@@ -1,5 +1,5 @@
 ﻿
-# ============== MAINTENANCE TASK: CHECK AND CLEAR SHADOW COPIES ==============
+# =============== SCHEDULED TASK: CHECK AND CLEAR SHADOW COPIES ===============
 <#
 Checks for shadow copies on a HOST server and attempts to delete them by
 resizing shadow copy storage. The script will find all volumes with shadow copies
