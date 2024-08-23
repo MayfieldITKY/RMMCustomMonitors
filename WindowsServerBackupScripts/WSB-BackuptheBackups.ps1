@@ -6,12 +6,70 @@
 # backup_the_backups.bat script that creates revisions without checking for
 # successful backup.
 
-
-# Common variables
+# COMMON VARIABLES
 $wsbDrive = (Get-WBSummary).LastBackupTarget
+$wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+
+
+# DEFINE FUNCTIONS
+# Check for successful backup
+function Get-LastBackupSuccess {
+  
+}
+
+# Check that the last backup can be renamed and append date and client name
+function Rename-LastBackup {}
+
+# Check that there are revisions and get count
+function Get-BackupRevisions {}
+
+# Check for revisions using legacy "old, older, oldest" naming convention and rename them
+function Get-LegacyRevisionNames {}
+
+# Check for protected revisions
+function Get-ProtectedRevisions {}
+
+# Check for very old revisions in case they should be protected
+function Get-OldRevisions {}
+
+# Check for other data on the backup drive
+function Get-OtherBackupDriveData {}
+
+# Calculate expected size of revisions
+function Get-RevisionSize {}
+
+# Calculate available space for revisions
+function Get-AvailableSpaceForRevisions {}
+
+# Determine number of revisions to keep (goal is four)
+function Get-TargetNumberForRevisions {}
+
+# Delete old revisions to target number minus one
+function Remove-OldRevisions {}
+
+# Write results to event log
+function Get-ResultsReport {}
+
+
+# MAIN FUNCTION
+function BackupTheBackups {
+    # COMMON VARIABLES
+    $wsbDrive = (Get-WBSummary).LastBackupTarget
+    $wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+
+
+}
+
+
+
+
+
+# REFACTORING
+
 $wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
 $howManyRevisions = $wsbRevisions.Length
 $oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
+
 
 
 # Check for successful backup. Do not change revisions if the most recent
