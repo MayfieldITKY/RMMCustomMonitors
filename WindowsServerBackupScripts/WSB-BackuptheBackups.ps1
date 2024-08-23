@@ -14,17 +14,37 @@ $wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name 
 # DEFINE FUNCTIONS
 # Check for successful backup
 function Get-LastBackupSuccess {
-  
+    $LastWSBDate = (Get-Date).AddHours(-24)
+    $LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
+    
+    If (-Not($LastWSBSuccessEvent)) {
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Error"
+            EventId = 2031
+            Message = "The last Windows Server Backup was not successful! No revisions were changed."
+        }
+        Write-EventLog @params
+        exit
+    }      
 }
 
-# Check that the last backup can be renamed and append date and client name
-function Rename-LastBackup {}
+# Rename a backup to append the client name and date
+function Rename-Backup {
+    $client = "get client shortname"
+    $revDate = Get-Date $rev.LastWriteTime -Format "yyyyMMdd-HHmm"    
+    $revNewName = "$($client)_TestBackup_$($revDate)"
+    $rev | Rename-Item -NewName $revNewName
+}
 
 # Check that there are revisions and get count
 function Get-BackupRevisions {}
 
 # Check for revisions using legacy "old, older, oldest" naming convention and rename them
-function Get-LegacyRevisionNames {}
+function Get-LegacyRevisionNames {
+    $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
+}
 
 # Check for protected revisions
 function Get-ProtectedRevisions {}
@@ -56,6 +76,8 @@ function BackupTheBackups {
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
     $wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+
+
 
 
 }
