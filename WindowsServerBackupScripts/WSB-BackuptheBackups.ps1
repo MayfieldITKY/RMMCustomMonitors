@@ -7,15 +7,148 @@
 # successful backup.
 
 # COMMON VARIABLES
-$wsbDrive = (Get-WBSummary).LastBackupTarget
-$allBackups = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "*WindowsImageBackup*"}
-$wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+#$client = $env:short_site_name -This is a Datto variable so we need a way to assign it to each host
+$client = "TestClient"
+$hostname = $env:COMPUTERNAME
+$minimumNumberofRevisions = 4
+$revisionGrowthFactor = 1.15
+$freeSpaceBuffer = 30
+
+
+# MAIN FUNCTION
+function BackupTheBackups {
+    # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
+    Get-LastBackupSuccess
+
+    # COMMON VARIABLES
+    $wsbDrive = (Get-WBSummary).LastBackupTarget
+    $wsbDriveName = $wsbDrive.Replace(":","")
+    $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+    $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
+    $protectedRevisions = Get-ProtectedRevisions
+    $veryOldRevisions = Get-OldRevisions
+    $nonBackupData = Get-ChildItem $wsbDrive | Where-Object {$_.Name -notlike "*WindowsImageBackup*"}
+    [int]$wsbDriveSpace = Get-TotalSpace
+    [int]$reservedSpace = Get-NonRevisionSpace
+    [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
+    $preferredNumberofRevisions = $minimumNumberofRevisions
+
+    # DO THINGS
+    # try to rename last backup with client, hostname, and backup date
+    try {Rename-Backup $wsbLastBackup}
+    catch {
+        Start-Sleep 10
+        try {
+            Rename-Backup $wsbLastBackup
+            Start-Sleep 10
+        }
+        catch {
+            $params = @{
+                LogName = "MITKY"
+                Source = "Scheduled Tasks"
+                EntryType = "Error"
+                EventId = 2032
+                Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
+            }
+            Write-EventLog @params
+            exit
+        }
+    }
+
+    # if there are not enough revisions and not enough space for them, determine if removing other data would help
+    if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
+        if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
+            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
+            if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+                $params = @{
+                    LogName = "MITKY"
+                    Source = "Scheduled Tasks"
+                    EntryType = "Warning"
+                    EventId = 2055
+                    Message = "There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions."
+                }
+                Write-EventLog @params
+            }
+        }
+    }
+
+    # if there is not space for another revision, delete the oldest current revision and update free space. Delete two revisions if necessary
+    if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+        Remove-OldestRevision
+        if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+            Remove-OldestRevision
+        }
+    }
+
+    # rename any legacy revisions (named with _old, _older, _oldest)
+    if ($legacyRevisions) {
+        foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
+    }
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+}
+
+
 
 
 # DEFINE FUNCTIONS
+# Check if any backups exist
+function Get-AllBackups {
+    try {Get-ChildItem $wsbDrive}
+    catch {
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Critical"
+            EventId = 2050
+            Message = "The backup drive was not found!"
+        }
+        Write-EventLog @params
+        exit
+    }
+    $allBackups = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "*WindowsImageBackup*"}
+    if(-Not($allBackups)) {
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Critical"
+            EventId = 2030
+            Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
+        }
+        Write-EventLog @params
+        exit
+    }
+
+    return $allBackups
+}
+
 # Check for successful backup
 function Get-LastBackupSuccess {
-    $LastWSBDate = (Get-Date).AddHours(-24)
+    If (-Not(Get-WBSummary)) {
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Warning"
+            EventId = 2010
+            Message = "Windows Server Backup is not configured for this server."
+        }
+        Write-EventLog @params
+        exit
+    }
+
+    $LastWSBDate = (Get-WBSummary).LastBackupTime
     $LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
     
     If (-Not($LastWSBSuccessEvent)) {
@@ -32,19 +165,22 @@ function Get-LastBackupSuccess {
 }
 
 # Rename a backup to append the client name and date
-function Rename-Backup($rev) {
-    #$client = $env:short_site_name
-    $client = "TestClient"
+function Get-RevisionNewName($rev) {
     $revDate = Get-Date $rev.CreationTime -Format "yyyyMMdd-HHmm"    
-    $revNewName = "$($client)_WindowsImageBackup_$($revDate)"
-    $rev | Rename-Item -NewName $revNewName
+    $revNewName = "$($client)_$($hostname)_WindowsImageBackup_$($revDate)"
+    return $revNewName
+}
+
+function Rename-Backup($rev) {
+    $revNewName = Get-RevisionNewName $rev
+    if (-Not($rev.Name -like $revNewName)) {$rev | Rename-Item -NewName $revNewName}
 }
 
 # Check for protected revisions
 function Get-ProtectedRevisions {
     $phrases = @("*do not delete*", "*dont delete*", "*delete after*", "*keep*")
     $result = @()
-    foreach ($bup in $allBackups) {
+    foreach ($bup in Get-AllBackups) {
         foreach ($p in $phrases) {
             if (-Not ($bup -in $result)) {
                 if ($bup.Name -like $p) {$result += $bup}
@@ -57,71 +193,129 @@ function Get-ProtectedRevisions {
 
 # Check for very old revisions in case they should be protected
 function Get-OldRevisions {
-    $cutoffDate = (Get-Date).AddMonths(-3)
+    $cutoffDate = (Get-Date).AddDays(-7) # Do we use 7 or 14 days?
     $result = @()
-    foreach ($bup in $allBackups) {
-        if ($bup.CreationTime -lt $cutoffDate) {$result += $bup}
-    }
-
-    return $result
-}
-
-# Check that there are revisions and get count
-function Get-CurrentRevisions {
-    $notCurrent = @($wsbLastBackup, $legacyRevisions, $protectedRevisions, $veryOldRevisions)
-    $result = @()
-    foreach ($bup in $allBackups) {
-        $current = $true
-        foreach ($group in $notCurrent) {
-            if ($bup -in $group) {
-                $current = $false
-                continue
-            }
+    foreach ($bup in Get-AllBackups) {
+        if ($bup -notin (Get-ProtectedRevisions)) {
+            if ($bup.CreationTime -lt $cutoffDate) {$result += $bup}
         }
-        if ($current) {$result += $bup}
     }
 
     return $result
 }
 
-# Check for other data on the backup drive
-function Get-OtherBackupDriveData {}
+# Check that there are current revisions and count them
+function Get-CurrentRevisions {
+    $notCurrent = @()
+    foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += $bup}
+    foreach ($bup in (Get-OldRevisions)) {$notCurrent += $bup}
+    $result = @()
+    foreach ($bup in Get-AllBackups) {
+        $bupNotCurrent = $false
+        if ($bup -in $notCurrent) {$bupNotCurrent = $true}
+        if (-Not($bupNotCurrent)) {$result += $bup}
+    }
+
+    return $result
+}
+
+function Get-CurrentNumberofRevisions {return (Get-CurrentRevisions).Length}
 
 # Calculate expected size of revisions
-function Get-RevisionSize {}
+function Get-RevisionSize {
+    $revisionSizes = foreach ($rev in Get-CurrentRevisions) {Get-ChildItem $wsbDrive\$rev -Recurse | Measure-Object -property length -sum}
+    return ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
+}
 
-# Calculate available space for revisions
-function Get-AvailableSpaceForRevisions {}
+# Calculate free space on backup drive
+function Get-FreeSpace {
+    [int]$free = (Get-PSDrive -Name $wsbDriveName).Free / 1GB
+    return $free
+}
+
+# Calculate total space on backup drive
+function Get-TotalSpace {
+    $used = (Get-PSDrive -Name $wsbDriveName).Used
+    $free = (Get-PSDrive -Name $wsbDriveName).Free
+    [int]$total = ($used + $free) / 1GB
+    return $total
+}
+
+# Calculate total space taken by a group of items
+function Get-SpaceUsed($group) {
+    $itemSizes = foreach ($item in $group) {Get-ChildItem $wsbDrive\$item -Recurse | Measure-Object -property length -sum}
+    [int]$result =  $itemSizes.Sum / 1GB
+    return $result
+}
+
+# Calculate space taken by non-backup data and protected revisions
+function Get-NonRevisionSpace {
+    [int]$reserved = 0
+    $nonBupSpace = 0
+    $protectedSpace = 0
+    $oldSpace = 0
+
+    if ($nonBackupData) {$nonBupSpace = Get-SpaceUsed $nonBackupData}
+    if ($protectedRevisions) {$protectedSpace = Get-SpaceUsed $protectedRevisions}
+    if ($veryOldRevisions) {$oldSpace = Get-SpaceUsed $veryOldRevisions}
+    $reserved = $nonBupSpace + $protectedSpace + $oldSpace
+
+    return $reserved
+}
 
 # Determine number of revisions to keep (goal is four)
-function Get-TargetNumberForRevisions {}
+function Get-TargetNumberForRevisions {
+    $potentialRevisions = $currentNumberofRevisions
+    if ($potentialRevisions -lt $preferredNumberofRevisions) {
+        $revsNeeded = $preferredNumberofRevisions - $potentialRevisions
+        [int]$revsCanAdd = Math.Truncate(((Get-FreeSpace) - 10) / ((Get-RevisionSize) * $revisionGrowthFactor))
+        if ($revsCanAdd -gt $revsNeeded) {$revsCanAdd = $revsNeeded}
+        $potentialRevisions = $potentialRevisions + $revsCanAdd
+    }
 
-# Delete old revisions to target number minus one
-function Remove-OldRevisions {}
+    return $potentialRevisions
+}
+
+# Delete a revision
+function Remove-Revision($rev) {
+    try {Remove-Item -Path $wsbDrive\$rev -Force -Recurse}
+    catch {
+        $revName = $rev.Name
+        $params = @{
+            LogName = "MITKY"
+            Source = "Scheduled Tasks"
+            EntryType = "Error"
+            EventId = 2033
+            Message = "Failed to delete revision: $revName! Check if it is open in another process."
+        }
+        Write-EventLog @params
+    }
+}
+
+# Delete the oldest current revision and update the current revisions list
+function Remove-OldestRevision {
+    $oldestRevision = Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
+    Remove-Revision $oldestRevision
+}
+
+
 
 # Write results to event log
 function Get-ResultsReport {}
 
 
-# MAIN FUNCTION
-function BackupTheBackups {
-    # COMMON VARIABLES
-    $wsbDrive = (Get-WBSummary).LastBackupTarget
-    $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
-    $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
-    $protectedRevisions = Get-ProtectedRevisions
-    $veryOldRevisions = Get-OldRevisions
+
+
+# CALL MAIN FUNCTION
+BackupTheBackups
 
 
 
-
-
-}
-
-
-
-
-
+# =======================================================
+# =======================================================
+# =======================================================
+# =======================================================
+# =======================================================
 # REFACTORING
 
 $wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
