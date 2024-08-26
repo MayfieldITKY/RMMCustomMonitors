@@ -8,7 +8,8 @@
 
 # COMMON VARIABLES
 $wsbDrive = (Get-WBSummary).LastBackupTarget
-$wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+$allBackups = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "*WindowsImageBackup*"}
+$wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
 
 
 # DEFINE FUNCTIONS
@@ -31,26 +32,57 @@ function Get-LastBackupSuccess {
 }
 
 # Rename a backup to append the client name and date
-function Rename-Backup {
-    $client = "get client shortname"
-    $revDate = Get-Date $rev.LastWriteTime -Format "yyyyMMdd-HHmm"    
-    $revNewName = "$($client)_TestBackup_$($revDate)"
+function Rename-Backup($rev) {
+    #$client = $env:short_site_name
+    $client = "TestClient"
+    $revDate = Get-Date $rev.CreationTime -Format "yyyyMMdd-HHmm"    
+    $revNewName = "$($client)_WindowsImageBackup_$($revDate)"
     $rev | Rename-Item -NewName $revNewName
 }
 
-# Check that there are revisions and get count
-function Get-BackupRevisions {}
+# Check for protected revisions
+function Get-ProtectedRevisions {
+    $phrases = @("*do not delete*", "*dont delete*", "*delete after*", "*keep*")
+    $result = @()
+    foreach ($bup in $allBackups) {
+        foreach ($p in $phrases) {
+            if (-Not ($bup -in $result)) {
+                if ($bup.Name -like $p) {$result += $bup}
+            }
+        }
+    }
 
-# Check for revisions using legacy "old, older, oldest" naming convention and rename them
-function Get-LegacyRevisionNames {
-    $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
+    return $result
 }
 
-# Check for protected revisions
-function Get-ProtectedRevisions {}
-
 # Check for very old revisions in case they should be protected
-function Get-OldRevisions {}
+function Get-OldRevisions {
+    $cutoffDate = (Get-Date).AddMonths(-3)
+    $result = @()
+    foreach ($bup in $allBackups) {
+        if ($bup.CreationTime -lt $cutoffDate) {$result += $bup}
+    }
+
+    return $result
+}
+
+# Check that there are revisions and get count
+function Get-CurrentRevisions {
+    $notCurrent = @($wsbLastBackup, $legacyRevisions, $protectedRevisions, $veryOldRevisions)
+    $result = @()
+    foreach ($bup in $allBackups) {
+        $current = $true
+        foreach ($group in $notCurrent) {
+            if ($bup -in $group) {
+                $current = $false
+                continue
+            }
+        }
+        if ($current) {$result += $bup}
+    }
+
+    return $result
+}
 
 # Check for other data on the backup drive
 function Get-OtherBackupDriveData {}
@@ -75,7 +107,11 @@ function Get-ResultsReport {}
 function BackupTheBackups {
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
-    $wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+    $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+    $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
+    $protectedRevisions = Get-ProtectedRevisions
+    $veryOldRevisions = Get-OldRevisions
+
 
 
 
