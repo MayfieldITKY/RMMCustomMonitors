@@ -32,6 +32,7 @@ function BackupTheBackups {
     [int]$reservedSpace = Get-NonRevisionSpace
     [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
+    $excessiveNonBackupData = $false
 
     # DO THINGS
     # try to rename last backup with client, hostname, and backup date
@@ -43,14 +44,7 @@ function BackupTheBackups {
             Start-Sleep 10
         }
         catch {
-            $params = @{
-                LogName = "MITKY"
-                Source = "Scheduled Tasks"
-                EntryType = "Error"
-                EventId = 2032
-                Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
-            }
-            Write-EventLog @params
+            Write-ReportEvents 'renameLastBackupFailed'
             exit
         }
     }
@@ -60,23 +54,17 @@ function BackupTheBackups {
         if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
             [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
             if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-                $params = @{
-                    LogName = "MITKY"
-                    Source = "Scheduled Tasks"
-                    EntryType = "Warning"
-                    EventId = 2055
-                    Message = "There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions."
-                }
-                Write-EventLog @params
+                $excessiveNonBackupData = $true
+                Write-ReportEvents 'excessiveNonBackupData'
             }
         }
     }
 
     # if there is not space for another revision, delete the oldest current revision and update free space. Delete two revisions if necessary
     if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-        Remove-OldestRevision
+        if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
         if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-            Remove-OldestRevision
+            if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
         }
     }
 
@@ -85,7 +73,6 @@ function BackupTheBackups {
         foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
     }
 
-    
 
 
 
@@ -106,28 +93,13 @@ function BackupTheBackups {
 # DEFINE FUNCTIONS
 # Check if any backups exist
 function Get-AllBackups {
-    try {Get-ChildItem $wsbDrive}
-    catch {
-        $params = @{
-            LogName = "MITKY"
-            Source = "Scheduled Tasks"
-            EntryType = "Critical"
-            EventId = 2050
-            Message = "The backup drive was not found!"
-        }
-        Write-EventLog @params
+    if (-Not(Test-Path $wsbDrive)) {
+        Write-ReportEvents 'noBackupDrive'
         exit
     }
     $allBackups = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "*WindowsImageBackup*"}
     if(-Not($allBackups)) {
-        $params = @{
-            LogName = "MITKY"
-            Source = "Scheduled Tasks"
-            EntryType = "Critical"
-            EventId = 2030
-            Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
-        }
-        Write-EventLog @params
+        Write-ReportEvents 'noRevisionsFound'
         exit
     }
 
@@ -136,30 +108,20 @@ function Get-AllBackups {
 
 # Check for successful backup
 function Get-LastBackupSuccess {
-    If (-Not(Get-WBSummary)) {
-        $params = @{
-            LogName = "MITKY"
-            Source = "Scheduled Tasks"
-            EntryType = "Warning"
-            EventId = 2010
-            Message = "Windows Server Backup is not configured for this server."
-        }
-        Write-EventLog @params
+    try {Get-WBSummary}
+    catch {
+        Write-ReportEvents 'noWindowsBackup'
         exit
     }
 
     $LastWSBDate = (Get-WBSummary).LastBackupTime
-    $LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
+    $LastDay = (Get-Date).AddHours(-24)
+    $checkDate = $LastWSBDate
+    if ($LastDay -lt $LastWSBDate) {$checkDate = $LastDay}
+    $LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$checkDate; Id='4'}
     
     If (-Not($LastWSBSuccessEvent)) {
-        $params = @{
-            LogName = "MITKY"
-            Source = "Scheduled Tasks"
-            EntryType = "Error"
-            EventId = 2031
-            Message = "The last Windows Server Backup was not successful! No revisions were changed."
-        }
-        Write-EventLog @params
+        Write-ReportEvents 'noBackupSuccess'
         exit
     }      
 }
@@ -278,195 +240,79 @@ function Get-TargetNumberForRevisions {
 
 # Delete a revision
 function Remove-Revision($rev) {
+    $revName = "$rev.Name"
     try {Remove-Item -Path $wsbDrive\$rev -Force -Recurse}
-    catch {
-        $revName = $rev.Name
-        $params = @{
-            LogName = "MITKY"
-            Source = "Scheduled Tasks"
-            EntryType = "Error"
-            EventId = 2033
-            Message = "Failed to delete revision: $revName! Check if it is open in another process."
-        }
-        Write-EventLog @params
-    }
+    catch {return $revName}
 }
 
-# Delete the oldest current revision and update the current revisions list
-function Remove-OldestRevision {
-    $oldestRevision = Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
-    Remove-Revision $oldestRevision
+# Get the oldest current revision
+function Get-OldestRevision {
+    Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
 }
-
 
 
 # Write results to event log
-function Get-ResultsReport {}
+function Write-ReportEvents($status) {
+    $params = @{
+        LogName = "MITKY"
+        Source = "Scheduled Tasks"
+        EntryType = ""
+        EventId = 0
+        Message = ""
+    }
+    switch ($status) {
+        'renameLastBackupFailed' {
+            $params.EntryType = "Error"
+            $params.EventId = 2032
+            $params.Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
+        }
+        'excessiveNonBackupData' {
+            $params.EntryType = "Warning"
+            $params.EventId = 2055
+            $params.Message = "There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions."
+        }
+        'noBackupDrive' {
+            $params.EntryType = "Critical"
+            $params.EventId = 2050
+            $params.Message = "The backup drive was not found!"
+        }
+        'noRevisionsFound' {
+            $params.EntryType = "Critical"
+            $params.EventId = 2030
+            $params.Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
+        }
+        'noWindowsBackup' {
+            $params.EntryType = "Warning"
+            $params.EventId = 2010
+            $params.Message = "Windows Server Backup is not configured for this server or has not run."
+        }
+        'noBackupSuccess' {
+            $params.EntryType = "Error"
+            $params.EventId = 2031
+            $params.Message = "The last Windows Server Backup was not successful! No revisions were changed."
+        }
+        'deleteRevisionFailed' {
+            $params.EntryType = "Error"
+            $params.EventId = 2033
+            $params.Message = "Failed to delete previous revision: $revName! Check if it is open in another process."
+        }
+        'success' {
+            $params.EntryType = "Information"
+            $params.EventId = 2039
+            $params.Message = "Backup revisions were checked and successfully rotated."
+        }
+        'success' {
+            $params.EntryType = "Information"
+            $params.EventId = 2039
+            $params.Message = "Backup revisions were checked and successfully rotated."
+        }
 
-
+    }
+    Write-EventLog @params
+}
 
 
 # CALL MAIN FUNCTION
 BackupTheBackups
 
 
-
-# =======================================================
-# =======================================================
-# =======================================================
-# =======================================================
-# =======================================================
-# REFACTORING
-
-$wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
-$howManyRevisions = $wsbRevisions.Length
-$oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
-
-
-
-# Check for successful backup. Do not change revisions if the most recent
-# backup was not successful.
-$LastWSBDate = (Get-Date).AddHours(-24)
-$LastWSBSuccessEvent = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Backup'; StartTime=$LastWSBDate; Id='4'}
-
-If (-Not($LastWSBSuccessEvent)) {
-    $params = @{
-      LogName = "MITKY"
-      Source = "Scheduled Tasks"
-      EntryType = "Error"
-      EventId = 2031
-      Message = "The last Windows Server Backup was not successful! No revisions were changed."
-    }
-    Write-EventLog @params
-    exit
-  }
-
-
-# Check that there are revisions. If not, Windows Server Backup may not be configured
-# or there could be a problem with the backup drive.
-If (-Not($wsbRevisions)) {
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Critical"
-    EventId = 2030
-    Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
-  }
-  Write-EventLog @params
-  exit
-}
-
-
-# Check that the last backup can be renamed. If not, another process may have the
-# folder or files open and revisions should not be rotated.
-$wsbLastBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
-
-try {
-  Rename-Item -Path ($wsbLastBackupPath).FullName -NewName "WindowsImageBackupRename"
-  Start-Sleep 5
-  $wsbRenameBackupPath = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackupRename"}
-  Rename-Item -Path ($wsbRenameBackupPath).FullName -NewName "WindowsImageBackup"
-} 
-catch { 
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Error"
-    EventId = 2032
-    Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
-  }
-  Write-EventLog @params
-  exit
-}
-
-
-# Check that there is enough space for revisions. Do some math first: get average
-# size of current revisions and get free space left on backup drive. If there are 
-# less than four revisions, add one if there is room. If there may not be room for
-# the current number of revisions, decrease the number of revisions by one.
-$oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
-$protectOldestRevision = $false
-$revisionSizes = foreach ($rev in $wsbRevisions) {Get-ChildItem $wsbDrive\$rev -Recurse | Measure-Object -property length -sum}
-$revisionTypicalSize = ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
-$wsbDriveFreeSpace = (Get-PSDrive -Name ($wsbDrive.Replace(":",""))).Free / 1GB
-$enoughSpace = $false
-If ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 1.15)) {$enoughSpace = $true}
-
-# Check if another revision is needed and add one if there is space.
-If (($howManyRevisions -lt 4) -and ($wsbDriveFreeSpace -gt ($revisionTypicalSize * 2.3))) {
-  $howManyRevisions += 1
-  $protectOldestRevision = $true
-
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Information"
-    EventId = 2038
-    Message = "There were less than four backup revisions. An additional revision was scheduled."
-  }
-  Write-EventLog @params
-}
-
-# Reduce the number of revisions if needed.
-If (-Not($enoughSpace)) {
-  Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
-  $wsbRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {($_.Name -like "WindowsImageBackup") -or ($_.Name -like "WindowsImageBackup_old*")}
-  $howManyRevisions = $wsbRevisions.Length
-  $oldestRevision = $wsbRevisions | Sort-Object LastWriteTime | Select-Object -First 1
-
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Warning"
-    EventId = 2034
-    Message = "Not enough drive space for the scheduled number of revisions. The oldest revision was deleted."
-  }
-  Write-EventLog @params
-}
-
-
-# Rotate revisisons.
-try {
-  If (-Not($protectOldestRevision)) {
-    Remove-Item -Path $wsbDrive\$oldestRevision -Force -Recurse
-  }
-  Start-Sleep 10
-  If ($howManyRevisions -gt 3) {
-      Rename-Item $wsbDrive\WindowsImageBackup_older -NewName "WindowsImageBackup_oldest"
-      Start-Sleep 10
-  }
-  If ($howManyRevisions -gt 2) {
-      Rename-Item $wsbDrive\WindowsImageBackup_old -NewName "WindowsImageBackup_older"
-      Start-Sleep 10
-  }
-  If ($howManyRevisions -gt 1) {
-      Rename-Item $wsbDrive\WindowsImageBackup -NewName "WindowsImageBackup_old"
-      Start-Sleep 10
-  }
-}
-catch {
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Error"
-    EventId = 2033
-    Message = "Failed to rotate divisions! Check if any revisions are open in another process."
-  }
-  Write-EventLog @params
-  exit
-}
-
-# If rotation was successful and the number of revisions was not reduced,
-# write success event to log MITKY.
-If ($enoughSpace) {
-  $params = @{
-    LogName = "MITKY"
-    Source = "Scheduled Tasks"
-    EntryType = "Information"
-    EventId = 2039
-    Message = "Backup revisions were successfully rotated.
-    "
-    }
-    Write-EventLog @params
-    exit
-}
