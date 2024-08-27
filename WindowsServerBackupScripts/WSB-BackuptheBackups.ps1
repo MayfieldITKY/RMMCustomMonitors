@@ -206,7 +206,7 @@ function Get-TotalSpace {
 # Calculate total space taken by a group of items
 function Get-SpaceUsed($group) {
     $itemSizes = foreach ($item in $group) {Get-ChildItem $wsbDrive\$item -Recurse | Measure-Object -property length -sum}
-    [int]$result =  $itemSizes.Sum / 1GB
+    [int]$result = ($itemSizes.Sum | Measure-Object -Sum).Sum / 1GB
     return $result
 }
 
@@ -301,12 +301,6 @@ function Write-ReportEvents($status) {
             $params.EventId = 2039
             $params.Message = "Backup revisions were checked and successfully rotated."
         }
-        'success' {
-            $params.EntryType = "Information"
-            $params.EventId = 2039
-            $params.Message = "Backup revisions were checked and successfully rotated."
-        }
-
     }
     Write-EventLog @params
 }
