@@ -14,7 +14,6 @@ $minimumNumberofRevisions = 4
 $revisionGrowthFactor = 1.15
 $freeSpaceBuffer = 30
 
-
 # MAIN FUNCTION
 function BackupTheBackups {
     # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
