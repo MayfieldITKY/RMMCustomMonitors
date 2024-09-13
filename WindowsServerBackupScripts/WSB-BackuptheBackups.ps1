@@ -48,7 +48,8 @@ function BackupTheBackups {
         }
     }
 
-    # if there are not enough revisions and not enough space for them, determine if removing other data would help
+    # if there are not enough revisions and not enough space for them, determine 
+    # if removing other data would help
     if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
         if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
             [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
@@ -59,7 +60,8 @@ function BackupTheBackups {
         }
     }
 
-    # if there is not space for another revision, delete the oldest current revision and update free space. Delete two revisions if necessary
+    # if there is not space for another revision, delete the oldest current
+    # revision and update free space. Delete two revisions if necessary
     if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
         if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
         if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
@@ -71,6 +73,10 @@ function BackupTheBackups {
     if ($legacyRevisions) {
         foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
     }
+
+    # report success - this should not trigger if there is a true failure. If the
+    # last backup was successful, renamed correctly, and there is sufficient space
+    # for a new backup, the task is successful.
 
 
 
@@ -85,7 +91,6 @@ function BackupTheBackups {
 
 
 }
-
 
 
 
@@ -139,7 +144,7 @@ function Rename-Backup($rev) {
 
 # Check for protected revisions
 function Get-ProtectedRevisions {
-    $phrases = @("*do not delete*", "*dont delete*", "*delete after*", "*keep*")
+    $phrases = @("*do*not*delete*", "*don*t*delete*", "*delete*after*", "*keep*")
     $result = @()
     foreach ($bup in Get-AllBackups) {
         foreach ($p in $phrases) {
@@ -168,13 +173,12 @@ function Get-OldRevisions {
 # Check that there are current revisions and count them
 function Get-CurrentRevisions {
     $notCurrent = @()
-    foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += $bup}
+    foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += "$($bup.Name)"}
     foreach ($bup in (Get-OldRevisions)) {$notCurrent += $bup}
     $result = @()
     foreach ($bup in Get-AllBackups) {
         $bupNotCurrent = $false
-        if ($bup -in $notCurrent) {$bupNotCurrent = $true}
-        if (-Not($bupNotCurrent)) {$result += $bup}
+        if (-Not($bup.Name -in $notCurrent)) {$result += $bup}
     }
 
     return $result
@@ -185,7 +189,8 @@ function Get-CurrentNumberofRevisions {return (Get-CurrentRevisions).Length}
 # Calculate expected size of revisions
 function Get-RevisionSize {
     $revisionSizes = foreach ($rev in Get-CurrentRevisions) {Get-ChildItem $wsbDrive\$rev -Recurse | Measure-Object -property length -sum}
-    return ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
+    [int]$revisionSize = ($revisionSizes.Sum | Measure-Object -Average).Average / 1GB
+    return $revisionSize
 }
 
 # Calculate free space on backup drive
@@ -229,7 +234,7 @@ function Get-TargetNumberForRevisions {
     $potentialRevisions = $currentNumberofRevisions
     if ($potentialRevisions -lt $preferredNumberofRevisions) {
         $revsNeeded = $preferredNumberofRevisions - $potentialRevisions
-        [int]$revsCanAdd = Math.Truncate(((Get-FreeSpace) - 10) / ((Get-RevisionSize) * $revisionGrowthFactor))
+        [int]$revsCanAdd = [Math]::Floor([decimal]((Get-FreeSpace) - 10) / ((Get-RevisionSize) * $revisionGrowthFactor))
         if ($revsCanAdd -gt $revsNeeded) {$revsCanAdd = $revsNeeded}
         $potentialRevisions = $potentialRevisions + $revsCanAdd
     }
@@ -248,7 +253,6 @@ function Remove-Revision($rev) {
 function Get-OldestRevision {
     Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
 }
-
 
 # Write results to event log
 function Write-ReportEvents($status) {
@@ -271,12 +275,12 @@ function Write-ReportEvents($status) {
             $params.Message = "There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions."
         }
         'noBackupDrive' {
-            $params.EntryType = "Critical"
+            $params.EntryType = "Error"
             $params.EventId = 2050
             $params.Message = "The backup drive was not found!"
         }
         'noRevisionsFound' {
-            $params.EntryType = "Critical"
+            $params.EntryType = "Error"
             $params.EventId = 2030
             $params.Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
         }
