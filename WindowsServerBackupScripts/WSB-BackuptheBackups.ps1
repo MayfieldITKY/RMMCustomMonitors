@@ -25,13 +25,14 @@ function BackupTheBackups {
     Write-LogAndOutput "Beginning task 'BACKUP THE BACKUPS' at $(Get-Date)..."
         
     # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
-    # Get-LastBackupSuccess
+    Get-LastBackupSuccess
 
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
     $wsbDriveName = $wsbDrive.Replace(":","")
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
+    Write-LogAndOutput ""
     Write-LogAndOutput "Checking for protected revisions..."
     $protectedRevisions = Get-ProtectedRevisions
     If ($protectedRevisions) {foreach ($rev in $protectedRevisions) {Write-LogAndOutput $rev.FullName}}
@@ -46,7 +47,6 @@ function BackupTheBackups {
     $nonBackupData = Get-ChildItem $wsbDrive | Where-Object {$_.Name -notlike "*WindowsImageBackup*"}
     If ($nonBackupData) {foreach ($item in $nonBackupData) {Write-LogAndOutput $item.FullName}}
     else {Write-LogAndOutput "No other data found."}
-    Write-LogAndOutput ""
     [int]$wsbDriveSpace = Get-TotalSpace
     [int]$reservedSpace = Get-NonRevisionSpace
     [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
@@ -57,14 +57,12 @@ function BackupTheBackups {
     # try to rename last backup with client, hostname, and backup date
     Write-LogAndOutput ""
     Write-LogAndOutput "Renaming last backup..."
-    try {Rename-Backup $wsbLastBackup}
-    catch {
+    If (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
+    If (Test-Path $wsbLastBackup) {
         Start-Sleep 10
-        try {
-            Rename-Backup $wsbLastBackup
-            Start-Sleep 10
-        }
-        catch {
+        Rename-Backup $wsbLastBackup
+        Start-Sleep 10
+        If (Test-Path $wsbLastBackup) {
             Write-ReportEvents 'renameLastBackupFailed'
             exit
         }
@@ -100,8 +98,8 @@ function BackupTheBackups {
     }
 
     # rename any legacy revisions (named with _old, _older, _oldest)
-    Write-LogAndOutput ""
     if ($legacyRevisions) {
+        Write-LogAndOutput ""
         Write-LogAndOutput 'Renaming revisions named with "_old, _older, _oldest" scheme...'
         foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
     }
@@ -112,40 +110,11 @@ function BackupTheBackups {
     Write-LogAndOutput ""
     Write-ReportEvents 'success'
     
-    # collect statistics and write to the log file
-    <#
-    $legacyRevStats = "There were no revisions named with '_old, _older, _oldest' scheme."
-    If ($legacyRevisions) {
-        $legacyRevStats = "Renamed $(($legacyRevisions).Count) revisions named with '_old, _older, _oldest'"
-    }
-    $protectedRevStats = "There are no protected revisions."
-    If ($protectedRevisions) {
-        $protectedRevStats = @()
-        $protectedRevStats += "There are $(($protectedRevisions).Count) protected revisions:"
-        foreach ($rev in $protectedRevisions) {$protectedRevStats += "$($rev.FullName)"}
-        $protectedRevStats += " "
-    }
-    $oldRevStats = "There are no old revisions to be reviewed."
-    If ($veryOldRevisions) {
-        $oldRevStats = @()
-        $oldRevStats += "There are $(($veryOldRevisions).Count) old revisions to be reviewed:"
-        foreach ($rev in $veryOldRevisions) {$veryOldRevisions += "$($rev.FullName)"}
-        $oldRevStats += " "
-    }
-    $nonBupStats = "There is no additional data (not backups) on the backup drive."
-    If ($nonBackupData) {
-        $nonBupStats = @()
-        $nonBupStats += "Additional data (not backups) was found on the backup drive. Consider moving or deleting this data:"
-        foreach ($thing in $nonBackupData) {$nonBupStats += "$($thing.FullName)"}
-        $nonBupStats += " "
-    }
-        #>
-
-
     $taskResults = @"
-======================== TASK RESULTS =======================
+=== TASK RESULTS =======================
 Task 'BACKUP THE BACKUPS' completed at $(Get-Date) for $hostname at $client.
 The last backup was successful and renamed. There should be enough space for the next backup.
+Most recent backup size (GB): $(Get-SpaceUsed $(Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -Last 1))
 
 Backup drive total space (GB): $wsbDriveSpace
 Backup drive free space (GB): $(Get-FreeSpace)
@@ -155,7 +124,7 @@ Backup drive space that is NOT available for revisions (GB): $(Get-NonRevisionSp
 There are $(Get-CurrentNumberofRevisions) current revisions. At least $preferredNumberofRevisions revisions are preferred.
 ======================= TASK COMPLETE =======================
 "@
-    
+    Write-LogAndOutput ""
     Write-LogAndOutput $taskResults
     return
 }
@@ -173,8 +142,6 @@ function New-TaskLogFile {
     $logFileName = "BackuptheBackupsLog_$($client)_$($hostname)_$($logDate).txt"
     New-Item -Path $taskLogFilePath -Name $logFileName
     $script:taskLogFullName = "$taskLogFilePath\$logFileName"
-
-    #If (Test-Path $taskLogFullName) {return $taskLogFullName}
 }
 
 # Write to log file and output
