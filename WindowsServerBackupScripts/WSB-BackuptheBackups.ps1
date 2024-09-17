@@ -11,8 +11,9 @@
 $client = "TestClient"
 $hostname = $env:COMPUTERNAME
 $minimumNumberofRevisions = 4
-$revisionGrowthFactor = 1.15
-$freeSpaceBuffer = 30
+$revisionGrowthFactor = 1.15 # use this multiplier to account for potential increase in backup size
+$freeSpaceBuffer = 30 # use this amount (in GB) when calculating available space for revisions
+$oldRevisionCutoff = -30 # revisions older than this many days are considered old. Use a negative number
 $taskLogFilePath = "C:\Scripts\Logs"
 $taskLogFullName = ""
 $taskLogContent = @()
@@ -140,10 +141,11 @@ $legacyRevStats
 $protectedRevStats
 $oldRevStats
 $nonBupStats
-$(foreach ($bup in $nonBackupData) {"$bup.FullName"})
+$(If ($nonBackupData) {foreach ($bup in $nonBackupData) {"$bup.FullName"}})
 
 "@
     
+    Write-LogAndOutput $taskResults
     return
 }
 
@@ -240,7 +242,7 @@ function Get-ProtectedRevisions {
 
 # Check for very old revisions in case they should be protected
 function Get-OldRevisions {
-    $cutoffDate = (Get-Date).AddDays(-7) # Do we use 7 or 14 days?
+    $cutoffDate = (Get-Date).AddDays($oldRevisionCutoff)
     $result = @()
     foreach ($bup in Get-AllBackups) {
         if ($bup -notin (Get-ProtectedRevisions)) {
