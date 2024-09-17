@@ -21,11 +21,11 @@ $taskLogContent = @()
 # MAIN FUNCTION
 function BackupTheBackups {
     # Start the log file
-    $taskLogFullName = "$(New-TaskLogFile)"
+    New-TaskLogFile
     Write-LogAndOutput "Beginning task 'BACKUP THE BACKUPS' at $(Get-Date)..."
-    
+        
     # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
-    Get-LastBackupSuccess
+    # Get-LastBackupSuccess
 
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
@@ -34,10 +34,19 @@ function BackupTheBackups {
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput "Checking for protected revisions..."
     $protectedRevisions = Get-ProtectedRevisions
+    If ($protectedRevisions) {foreach ($rev in $protectedRevisions) {Write-LogAndOutput $rev.FullName}}
+    else {Write-LogAndOutput "No protected revisions found."}
+    Write-LogAndOutput ""
     Write-LogAndOutput "Checking for old revisions. Confirm if these should be protected or deleted..."
     $veryOldRevisions = Get-OldRevisions
+    If ($veryOldRevisions) {foreach ($rev in $veryOldRevisions) {Write-LogAndOutput $rev.FullName}}
+    else {Write-LogAndOutput "No old revisions found."}
+    Write-LogAndOutput ""
     Write-LogAndOutput "Checking for other data on the backup drive..."
     $nonBackupData = Get-ChildItem $wsbDrive | Where-Object {$_.Name -notlike "*WindowsImageBackup*"}
+    If ($nonBackupData) {foreach ($item in $nonBackupData) {Write-LogAndOutput $item.FullName}}
+    else {Write-LogAndOutput "No other data found."}
+    Write-LogAndOutput ""
     [int]$wsbDriveSpace = Get-TotalSpace
     [int]$reservedSpace = Get-NonRevisionSpace
     [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
@@ -46,6 +55,7 @@ function BackupTheBackups {
 
     # DO THINGS
     # try to rename last backup with client, hostname, and backup date
+    Write-LogAndOutput ""
     Write-LogAndOutput "Renaming last backup..."
     try {Rename-Backup $wsbLastBackup}
     catch {
@@ -62,6 +72,7 @@ function BackupTheBackups {
 
     # if there are not enough revisions and not enough space for them, determine 
     # if removing other data would help
+    Write-LogAndOutput ""
     Write-LogAndOutput "Checking number of revisions..."
     if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
         $num = $preferredNumberofRevisions
@@ -78,6 +89,7 @@ function BackupTheBackups {
 
     # if there is not space for another revision, delete the oldest current
     # revision and update free space. Delete two revisions if necessary
+    Write-LogAndOutput ""
     Write-LogAndOutput "Checking if there is enough free space for the next backup..."
     if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
         Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
@@ -88,6 +100,7 @@ function BackupTheBackups {
     }
 
     # rename any legacy revisions (named with _old, _older, _oldest)
+    Write-LogAndOutput ""
     if ($legacyRevisions) {
         Write-LogAndOutput 'Renaming revisions named with "_old, _older, _oldest" scheme...'
         foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
@@ -96,9 +109,11 @@ function BackupTheBackups {
     # report success - this should not trigger if there is a true failure. If the
     # last backup was successful, renamed correctly, and there is sufficient space
     # for a new backup, the task is successful.
+    Write-LogAndOutput ""
     Write-ReportEvents 'success'
     
     # collect statistics and write to the log file
+    <#
     $legacyRevStats = "There were no revisions named with '_old, _older, _oldest' scheme."
     If ($legacyRevisions) {
         $legacyRevStats = "Renamed $(($legacyRevisions).Count) revisions named with '_old, _older, _oldest'"
@@ -124,10 +139,11 @@ function BackupTheBackups {
         foreach ($thing in $nonBackupData) {$nonBupStats += "$($thing.FullName)"}
         $nonBupStats += " "
     }
+        #>
 
 
     $taskResults = @"
-======================= TASK RESULTS =======================
+======================== TASK RESULTS =======================
 Task 'BACKUP THE BACKUPS' completed at $(Get-Date) for $hostname at $client.
 The last backup was successful and renamed. There should be enough space for the next backup.
 
@@ -137,19 +153,12 @@ Backup revision expected size (GB): $(Get-RevisionSize)
 Backup drive space that is NOT available for revisions (GB): $(Get-NonRevisionSpace)
 
 There are $(Get-CurrentNumberofRevisions) current revisions. At least $preferredNumberofRevisions revisions are preferred.
-$legacyRevStats
-$protectedRevStats
-$oldRevStats
-$nonBupStats
-$(If ($nonBackupData) {foreach ($bup in $nonBackupData) {"$bup.FullName"}})
-
+======================= TASK COMPLETE =======================
 "@
     
     Write-LogAndOutput $taskResults
     return
 }
-
-
 
 # DEFINE FUNCTIONS
 # Make timestamp
@@ -163,13 +172,18 @@ function New-TaskLogFile {
     $logDate = Get-Date -Format "yyyyMMdd-HHmm"
     $logFileName = "BackuptheBackupsLog_$($client)_$($hostname)_$($logDate).txt"
     New-Item -Path $taskLogFilePath -Name $logFileName
-    $taskLogFullName = "$taskLogFilePath\$logFileName"
+    $script:taskLogFullName = "$taskLogFilePath\$logFileName"
 
-    If (Test-Path $taskLogFullName) {return $taskLogFullName}
+    #If (Test-Path $taskLogFullName) {return $taskLogFullName}
 }
 
 # Write to log file and output
 function Write-LogAndOutput($message) {
+    If (-Not ($message)) {
+        Write-Output " "
+        Add-Content -Path $taskLogFullName " "
+        return
+    }
     Write-Output "$(Get-Timestamp): $message"
     Add-Content -Path $taskLogFullName "$(Get-Timestamp): $message"
 } 
@@ -185,7 +199,6 @@ function Get-AllBackups {
         Write-ReportEvents 'noRevisionsFound'
         exit
     }
-
     return $allBackups
 }
 
@@ -197,7 +210,6 @@ function Get-LastBackupSuccess {
         Write-ReportEvents 'noWindowsBackup'
         exit
     }
-
     $LastWSBDate = (Get-WBSummary).LastBackupTime
     $LastDay = (Get-Date).AddHours(-24)
     $checkDate = $LastWSBDate
@@ -236,20 +248,21 @@ function Get-ProtectedRevisions {
             }
         }
     }
-
     return $result
 }
 
 # Check for very old revisions in case they should be protected
 function Get-OldRevisions {
+    $protectedRevisions = Get-ProtectedRevisions
     $cutoffDate = (Get-Date).AddDays($oldRevisionCutoff)
     $result = @()
     foreach ($bup in Get-AllBackups) {
-        if ($bup -notin (Get-ProtectedRevisions)) {
-            if ($bup.CreationTime -lt $cutoffDate) {$result += $bup}
+        foreach ($pbup in $protectedRevisions) {
+            if ($bup.Name -ne $pbup.Name) {
+                if ($bup.CreationTime -lt $cutoffDate) {$result += $bup}
+            }
         }
     }
-
     return $result
 }
 
@@ -262,7 +275,6 @@ function Get-CurrentRevisions {
     foreach ($bup in Get-AllBackups) {
         if (-Not($bup.Name -in $notCurrent)) {$result += $bup}
     }
-
     return $result
 }
 
@@ -323,7 +335,6 @@ function Get-TargetNumberForRevisions {
         $potentialRevisions = $potentialRevisions + $revsCanAdd
         Write-LogAndOutput "$($revsNeeded) additional revisions are needed. There is space for $($revsCanAdd) additional revisions."
     }
-
     return $potentialRevisions
 }
 
@@ -396,5 +407,3 @@ function Write-ReportEvents($status) {
 
 # CALL MAIN FUNCTION
 BackupTheBackups
-
-
