@@ -16,7 +16,7 @@ $freeSpaceBuffer = 30 # use this amount (in GB) when calculating available space
 $oldRevisionCutoff = -30 # revisions older than this many days are considered old. Use a negative number
 $taskLogFilePath = "C:\Scripts\Logs"
 $taskLogFullName = ""
-$taskLogContent = @()
+# $taskLogContent = @()
 
 # MAIN FUNCTION
 function BackupTheBackups {
@@ -49,7 +49,7 @@ function BackupTheBackups {
     else {Write-LogAndOutput "No other data found."}
     [int]$wsbDriveSpace = Get-TotalSpace
     [int]$reservedSpace = Get-NonRevisionSpace
-    [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
+    # recalculated later so not needed yet [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
     $excessiveNonBackupData = $false
 
