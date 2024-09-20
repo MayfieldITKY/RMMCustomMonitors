@@ -2,32 +2,51 @@
 # Create or update a scheduled task to run WSB-BackuptheBackups.ps1.
 
 # First look for an existing task using the old batch script and disable it
-$oldTaskNames = @("Backup the backups", "Backup_the_backups", "backupthebackups")
-Get-ScheduledTask | Where-Object {$oldTaskNames -contains $_.TaskName} | Disable-ScheduledTask
+$oldTaskName = "*backup*the*backups*"
+Get-ScheduledTask | Where-Object {$_.TaskName -like $oldTaskName} | Disable-ScheduledTask
 
-# Check for an existing task and delete it if found. This is needed in case 
-# task schedule or other parameters have changed since the last update.
-$taskName = "MITKY - Backup the Backups"
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
-
-# Schedule for 30 minutes before Windows Server Backup start time
-$wsbPolicy = Get-WBPolicy
-$wsbTime = Get-WBSchedule -Policy $wsbPolicy
-$taskTriggerTime = $wsbTime.AddMinutes(-30)
-$taskTriggerTime = $taskTriggerTime.ToString("HH:mm")
-
+# DEFINE THESE VARIABLES
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-BackuptheBackups.ps1"
 $newTaskName = "MITKY - Backup the Backups"
-$taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily
+$newTaskDescription = @"
+Renames backup revisions with date and rotates revisions if needed.
+This only runs after a successful Windows Server Backup.
+"@
+# Create a test task with the correct trigger and export it, then find the <Subscription> tag under <Triggers>
+$triggerSubscription = @"
+<QueryList><Query Id="0" Path="Microsoft-Windows-Backup">
+<Select Path="Microsoft-Windows-Backup">*[System[Provider[@Name='Microsoft-Windows-Backup'] and EventID=4]]
+</Select></Query></QueryList>
+"@
+$triggerDelay = "PT30M" # 30 minutes after trigger event
 
-# DO NOT CHANGE THESE VARIABLES
+# =============================================================================
+# DO NOT CHANGE BELOW THIS LINE
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
 
-# CREATES THE SCHEDULED TASK
-Register-ScheduledTask -TaskName $newTaskName -Trigger $taskTrigger -User $User -Action $Action -RunLevel Highest -TaskPath $taskPath
+# Task trigger on event ID
+$triggerClass = Get-cimclass MSFT_TaskEventTrigger root/Microsoft/Windows/TaskScheduler
+$taskTrigger = $triggerClass | New-CimInstance -ClientOnly
+$taskTrigger.Enabled = $true
+$taskTrigger.Subscription = $triggerSubscription
+$taskTrigger.Delay = $triggerDelay
+
+$newTaskParams = @{
+  TaskName = $newTaskName
+  Description = $newTaskDescription
+  TaskPath = $taskPath
+  Action = $Action
+  User = $User
+  RunLevel = "Highest"
+  Trigger = $taskTrigger
+}
+
+# DELETE EXISTING TASK AND CREATE NEW TASK
+Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
+Register-ScheduledTask @newTaskParams
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
