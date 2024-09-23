@@ -30,6 +30,9 @@ function BackupTheBackups {
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
     $wsbDriveName = $wsbDrive.Replace(":","")
+    $wsbDestIsNetworkLocation = Get-IfNetworkLocation $wsbDrive
+    $wsbDestHostname, $wsbDestFolder = "", ""
+    If ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput ""
@@ -58,11 +61,11 @@ function BackupTheBackups {
     Write-LogAndOutput ""
     Write-LogAndOutput "Renaming last backup..."
     If (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
-    If (Test-Path $wsbLastBackup) {
+    If (Test-Path $wsbLastBackup.FullName) {
         Start-Sleep 10
         Rename-Backup $wsbLastBackup
         Start-Sleep 10
-        If (Test-Path $wsbLastBackup) {
+        If (Test-Path $wsbLastBackup.FullName) {
             Write-ReportEvents 'renameLastBackupFailed'
             exit
         }
@@ -140,7 +143,7 @@ function New-TaskLogFile {
     }
     $logDate = Get-Date -Format "yyyyMMdd-HHmm"
     $logFileName = "BackuptheBackupsLog_$($client)_$($hostname)_$($logDate).txt"
-    New-Item -Path $taskLogFilePath -Name $logFileName
+    New-Item -Path $taskLogFilePath -Name $logFileName -ItemType File
     $script:taskLogFullName = "$taskLogFilePath\$logFileName"
 }
 
@@ -187,6 +190,28 @@ function Get-LastBackupSuccess {
         Write-ReportEvents 'noBackupSuccess'
         exit
     }      
+}
+
+# Check if backup destination is a network path
+function Get-IfNetworkLocation($destPath) {
+    If (-Not($destPath)) {return $false}
+    Elseif (Get-PSDrive $destPath -ErrorAction Ignore) {return $false}
+    Elseif ($destPath -like "\\*") {return $true}
+}
+
+# Get information (hostname and folder) if backup location is a network path
+function Get-NetworkLocationInfo($destPath) {
+    $bupPath = ("$destPath".Replace('\\', ''))
+    $bupPath = "$bupPath" -split '\\', 2
+    return $bupPath[0], $bupPath[1]
+}
+
+# Get drive object if backup location is a network path
+function Get-NetworkDrive($destPath) {
+    $wsbDest = (Get-WmiObject -Class win32_share -ComputerName $wsbDestHostname | Where-Object {$_.Name -like "$wsbDestFolder"})
+    $wsbDestDeviceID = ($wsbDest.Path).Replace("\","")
+    $wsbDestDrive = (Get-WmiObject -Class Win32_LogicalDisk -ComputerName $wsbDestHostname | Where-Object {$_.DeviceID -like $wsbDestDeviceID})
+    return $wsbDestDrive
 }
 
 # Rename a backup to append the client name and date
@@ -237,7 +262,7 @@ function Get-OldRevisions {
 function Get-CurrentRevisions {
     $notCurrent = @()
     foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += "$($bup.Name)"}
-    foreach ($bup in (Get-OldRevisions)) {$notCurrent += $bup}
+    foreach ($bup in (Get-OldRevisions)) {$notCurrent += "$($bup.Name)"}
     $result = @()
     foreach ($bup in Get-AllBackups) {
         if (-Not($bup.Name -in $notCurrent)) {$result += $bup}
@@ -256,15 +281,25 @@ function Get-RevisionSize {
 
 # Calculate free space on backup drive
 function Get-FreeSpace {
-    [int]$free = (Get-PSDrive -Name $wsbDriveName).Free / 1GB
+    [int]$free = 0
+    If ($wsbDestIsNetworkLocation) {
+        $destDrive = Get-NetworkDrive $wsbDrive
+        [int]$free = $destDrive.FreeSpace / 1GB
+    } else {[int]$free = (Get-PSDrive -Name $wsbDriveName).Free / 1GB}
     return $free
 }
 
 # Calculate total space on backup drive
 function Get-TotalSpace {
-    $used = (Get-PSDrive -Name $wsbDriveName).Used
-    $free = (Get-PSDrive -Name $wsbDriveName).Free
-    [int]$total = ($used + $free) / 1GB
+    [int]$total = 0
+    If ($wsbDestIsNetworkLocation) {
+        $destDrive = Get-NetworkDrive $wsbDrive
+        [int]$total = $destDrive.Size / 1GB
+    } else {
+        $used = (Get-PSDrive -Name $wsbDriveName).Used
+        $free = (Get-PSDrive -Name $wsbDriveName).Free
+        [int]$total = ($used + $free) / 1GB
+    }
     return $total
 }
 
