@@ -54,7 +54,6 @@ function BackupTheBackups {
     [int]$reservedSpace = Get-NonRevisionSpace
     # recalculated later so not needed yet [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
-    $excessiveNonBackupData = $false
 
     # DO THINGS
     # try to rename last backup with client, hostname, and backup date
@@ -71,33 +70,16 @@ function BackupTheBackups {
         }
     }
 
-    # if there are not enough revisions and not enough space for them, determine 
-    # if removing other data would help
+    # Check number of revisions, free space for additional revisions if they are
+    # needed, and if removing non-backup data would make enough space for more
+    # revisions.
     Write-LogAndOutput ""
-    Write-LogAndOutput "Checking number of revisions..."
-    if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
-        $num = $preferredNumberofRevisions
-        Write-LogAndOutput "There are fewer than $num revisions. Checking revision size and free space..."
-        if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
-            Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
-            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
-            if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-                $excessiveNonBackupData = $true
-                Write-ReportEvents 'excessiveNonBackupData'
-            }
-        }
-    }
-
-    # if there is not space for another revision, delete the oldest current
-    # revision and update free space. Delete two revisions if necessary
-    Write-LogAndOutput ""
-    Write-LogAndOutput "Checking if there is enough free space for the next backup..."
-    if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-        Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
-        if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
-        if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-            if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
-        }
+    Write-LogAndOutput "Checking backup destination for available free space..."
+    if (($wsbDriveSpace -gt 0) -and ((Get-FreeSpace) -gt 0)) {
+        Get-IfExcessiveNonBackupData
+        Rotate-Revisions
+    } else {
+        Write-LogAndOutput "Error getting drive space information! Check access permissions for backup destination!"
     }
 
     # rename any legacy revisions (named with _old, _older, _oldest)
@@ -350,6 +332,35 @@ function Remove-Revision($rev) {
 # Get the oldest current revision
 function Get-OldestRevision {
     Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
+}
+
+# Check if deleting non-backup data would make room for a needed revision
+function Get-IfExcessiveNonBackupData {
+    $excessiveNonBackupData = $false
+    if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
+        $num = $preferredNumberofRevisions
+        Write-LogAndOutput "There are fewer than $num revisions. Checking revision size and free space..."
+        if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
+            Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
+            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
+            if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+                $excessiveNonBackupData = $true
+                Write-ReportEvents 'excessiveNonBackupData'
+            }
+        }
+    }
+    return $excessiveNonBackupData
+}
+
+# Check free space and delete revisions if necessary
+function Rotate-Revisions {
+    if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+        Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
+        if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
+        if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+            if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
+        }
+    }
 }
 
 # Write results to event log
