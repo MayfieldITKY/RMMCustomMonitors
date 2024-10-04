@@ -337,37 +337,37 @@ function Write-ReportEvents($status) {
     switch ($status) {
         'renameLastBackupFailed' {
             $params.EntryType = "Error"
-            $params.EventId = 2032
+            $params.EventId = 2033
             $params.Message = "The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open."
         }
         'excessiveNonBackupData' {
             $params.EntryType = "Warning"
-            $params.EventId = 2055
+            $params.EventId = 2036
             $params.Message = "There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions."
         }
         'noBackupDrive' {
             $params.EntryType = "Error"
-            $params.EventId = 2050
+            $params.EventId = 2030
             $params.Message = "The backup drive was not found!"
         }
         'noRevisionsFound' {
             $params.EntryType = "Error"
-            $params.EventId = 2030
+            $params.EventId = 2031
             $params.Message = "No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy."
         }
         'noWindowsBackup' {
             $params.EntryType = "Warning"
-            $params.EventId = 2010
+            $params.EventId = 2035
             $params.Message = "Windows Server Backup is not configured for this server or has not run."
         }
         'noBackupSuccess' {
             $params.EntryType = "Error"
-            $params.EventId = 2031
+            $params.EventId = 2032
             $params.Message = "The last Windows Server Backup was not successful! No revisions were changed."
         }
         'deleteRevisionFailed' {
             $params.EntryType = "Error"
-            $params.EventId = 2033
+            $params.EventId = 2034
             $params.Message = "Failed to delete previous revision! Check if it is open in another process."
         }
         'success' {
