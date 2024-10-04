@@ -7,8 +7,7 @@
 # successful backup.
 
 # COMMON VARIABLES
-#$client = $env:short_site_name -This is a Datto variable so we need a way to assign it to each host
-$client = "TestClient"
+$client = $env:short_site_name # This is a Datto variable so we need a way to assign it to each host
 $hostname = $env:COMPUTERNAME
 $minimumNumberofRevisions = 4
 $revisionGrowthFactor = 1.15 # use this multiplier to account for potential increase in backup size
@@ -30,9 +29,6 @@ function BackupTheBackups {
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
     $wsbDriveName = $wsbDrive.Replace(":","")
-    $wsbDestIsNetworkLocation = Get-IfNetworkLocation $wsbDrive
-    $wsbDestHostname, $wsbDestFolder = "", ""
-    If ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput ""
@@ -54,32 +50,60 @@ function BackupTheBackups {
     [int]$reservedSpace = Get-NonRevisionSpace
     # recalculated later so not needed yet [int]$spaceForRevisions = $wsbDriveSpace - $reservedSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
+    $excessiveNonBackupData = $false
 
     # DO THINGS
     # try to rename last backup with client, hostname, and backup date
     Write-LogAndOutput ""
     Write-LogAndOutput "Renaming last backup..."
     If (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
-    If (Test-Path $wsbLastBackup.FullName) {
+    If (Test-Path $wsbLastBackup) {
         Start-Sleep 10
         Rename-Backup $wsbLastBackup
         Start-Sleep 10
-        If (Test-Path $wsbLastBackup.FullName) {
+        If (Test-Path $wsbLastBackup) {
             Write-ReportEvents 'renameLastBackupFailed'
             exit
         }
     }
 
-    # Check number of revisions, free space for additional revisions if they are
-    # needed, and if removing non-backup data would make enough space for more
-    # revisions.
+    # if there are not enough revisions and not enough space for them, determine 
+    # if removing other data would help
     Write-LogAndOutput ""
-    Write-LogAndOutput "Checking backup destination for available free space..."
-    if (($wsbDriveSpace -gt 0) -and ((Get-FreeSpace) -gt 0)) {
-        Get-IfExcessiveNonBackupData
-        Rotate-Revisions
-    } else {
-        Write-LogAndOutput "Error getting drive space information! Check access permissions for backup destination!"
+    Write-LogAndOutput "Checking number of revisions..."
+    if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
+        $num = $preferredNumberofRevisions
+        Write-LogAndOutput "There are fewer than $num revisions. Checking revision size and free space..."
+        if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
+            Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
+            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
+            if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+                $excessiveNonBackupData = $true
+                Write-ReportEvents 'excessiveNonBackupData'
+            }
+        }
+    }
+
+    # if there is not space for another revision, delete the oldest current
+    # revision and update free space. Delete two revisions if necessary
+    Write-LogAndOutput ""
+    Write-LogAndOutput "Checking if there is enough free space for the next backup..."
+    if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+        Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
+        $oldestRev = Get-OldestRevision
+        Write-LogAndOutput "Deleting revision: $(($oldestRev).FullName)"
+        Remove-Revision $oldestRev
+        If (Test-Path $(($oldestRev).FullName) -ErrorAction Ignore) { 
+            Write-ReportEvents 'deleteRevisionFailed'
+        }
+        If ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
+            $oldestRev = Get-OldestRevision
+            Write-LogAndOutput "Deleting revision: $(($oldestRev).FullName)"
+            Remove-Revision $oldestRev
+            If (Test-Path $(($oldestRev).FullName) -ErrorAction Ignore) { 
+                Write-ReportEvents 'deleteRevisionFailed'
+            }
+        }
     }
 
     # rename any legacy revisions (named with _old, _older, _oldest)
@@ -125,7 +149,7 @@ function New-TaskLogFile {
     }
     $logDate = Get-Date -Format "yyyyMMdd-HHmm"
     $logFileName = "BackuptheBackupsLog_$($client)_$($hostname)_$($logDate).txt"
-    New-Item -Path $taskLogFilePath -Name $logFileName -ItemType File
+    New-Item -Path $taskLogFilePath -Name $logFileName
     $script:taskLogFullName = "$taskLogFilePath\$logFileName"
 }
 
@@ -172,28 +196,6 @@ function Get-LastBackupSuccess {
         Write-ReportEvents 'noBackupSuccess'
         exit
     }      
-}
-
-# Check if backup destination is a network path
-function Get-IfNetworkLocation($destPath) {
-    If (-Not($destPath)) {return $false}
-    Elseif (Get-PSDrive $destPath -ErrorAction Ignore) {return $false}
-    Elseif ($destPath -like "\\*") {return $true}
-}
-
-# Get information (hostname and folder) if backup location is a network path
-function Get-NetworkLocationInfo($destPath) {
-    $bupPath = ("$destPath".Replace('\\', ''))
-    $bupPath = "$bupPath" -split '\\', 2
-    return $bupPath[0], $bupPath[1]
-}
-
-# Get drive object if backup location is a network path
-function Get-NetworkDrive($destPath) {
-    $wsbDest = (Get-WmiObject -Class win32_share -ComputerName $wsbDestHostname | Where-Object {$_.Name -like "$wsbDestFolder"})
-    $wsbDestDeviceID = ($wsbDest.Path).Replace("\","")
-    $wsbDestDrive = (Get-WmiObject -Class Win32_LogicalDisk -ComputerName $wsbDestHostname | Where-Object {$_.DeviceID -like $wsbDestDeviceID})
-    return $wsbDestDrive
 }
 
 # Rename a backup to append the client name and date
@@ -244,7 +246,7 @@ function Get-OldRevisions {
 function Get-CurrentRevisions {
     $notCurrent = @()
     foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += "$($bup.Name)"}
-    foreach ($bup in (Get-OldRevisions)) {$notCurrent += "$($bup.Name)"}
+    foreach ($bup in (Get-OldRevisions)) {$notCurrent += $bup}
     $result = @()
     foreach ($bup in Get-AllBackups) {
         if (-Not($bup.Name -in $notCurrent)) {$result += $bup}
@@ -263,25 +265,15 @@ function Get-RevisionSize {
 
 # Calculate free space on backup drive
 function Get-FreeSpace {
-    [int]$free = 0
-    If ($wsbDestIsNetworkLocation) {
-        $destDrive = Get-NetworkDrive $wsbDrive
-        [int]$free = $destDrive.FreeSpace / 1GB
-    } else {[int]$free = (Get-PSDrive -Name $wsbDriveName).Free / 1GB}
+    [int]$free = (Get-PSDrive -Name $wsbDriveName).Free / 1GB
     return $free
 }
 
 # Calculate total space on backup drive
 function Get-TotalSpace {
-    [int]$total = 0
-    If ($wsbDestIsNetworkLocation) {
-        $destDrive = Get-NetworkDrive $wsbDrive
-        [int]$total = $destDrive.Size / 1GB
-    } else {
-        $used = (Get-PSDrive -Name $wsbDriveName).Used
-        $free = (Get-PSDrive -Name $wsbDriveName).Free
-        [int]$total = ($used + $free) / 1GB
-    }
+    $used = (Get-PSDrive -Name $wsbDriveName).Used
+    $free = (Get-PSDrive -Name $wsbDriveName).Free
+    [int]$total = ($used + $free) / 1GB
     return $total
 }
 
@@ -324,43 +316,13 @@ function Get-TargetNumberForRevisions {
 
 # Delete a revision
 function Remove-Revision($rev) {
-    $revName = "$rev.Name"
-    try {Remove-Item -Path $wsbDrive\$rev -Force -Recurse}
-    catch {return $revName}
+    Remove-Item -Path $wsbDrive\$rev -Force -Recurse
+    Start-Sleep 10
 }
 
 # Get the oldest current revision
 function Get-OldestRevision {
     Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
-}
-
-# Check if deleting non-backup data would make room for a needed revision
-function Get-IfExcessiveNonBackupData {
-    $excessiveNonBackupData = $false
-    if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
-        $num = $preferredNumberofRevisions
-        Write-LogAndOutput "There are fewer than $num revisions. Checking revision size and free space..."
-        if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
-            Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
-            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
-            if ($potentialSpace -gt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-                $excessiveNonBackupData = $true
-                Write-ReportEvents 'excessiveNonBackupData'
-            }
-        }
-    }
-    return $excessiveNonBackupData
-}
-
-# Check free space and delete revisions if necessary
-function Rotate-Revisions {
-    if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-        Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
-        if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
-        if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-            if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
-        }
-    }
 }
 
 # Write results to event log
@@ -406,7 +368,7 @@ function Write-ReportEvents($status) {
         'deleteRevisionFailed' {
             $params.EntryType = "Error"
             $params.EventId = 2033
-            $params.Message = "Failed to delete previous revision: $revName! Check if it is open in another process."
+            $params.Message = "Failed to delete previous revision! Check if it is open in another process."
         }
         'success' {
             $params.EntryType = "Information"
