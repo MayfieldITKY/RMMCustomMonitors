@@ -155,7 +155,6 @@ $eVarName = "short_site_name"
 [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
 
 
-
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
 Write-Output "Update completed! Cleaning up temporary files and reporting results..."
