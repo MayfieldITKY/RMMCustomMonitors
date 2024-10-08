@@ -147,6 +147,15 @@ foreach ($script in $setupScripts) {
 }
 
 
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+# Set or update environment variables such as Datto site variables or UDFs.
+# These should NEVER contain secrets!
+$eVarName = "short_site_name"
+[string]$eVarValue = $env:short_site_name
+[System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+
+
+
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
 Write-Output "Update completed! Cleaning up temporary files and reporting results..."
