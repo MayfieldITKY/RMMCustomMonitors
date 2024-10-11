@@ -152,8 +152,9 @@ foreach ($script in $setupScripts) {
 # These should NEVER contain secrets!
 $eVarName = "short_site_name"
 [string]$eVarValue = $env:short_site_name
-[System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
-
+If ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) {
+    [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+}
 
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
