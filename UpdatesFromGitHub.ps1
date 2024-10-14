@@ -152,7 +152,7 @@ foreach ($script in $setupScripts) {
 # These should NEVER contain secrets!
 $eVarName = "short_site_name"
 [string]$eVarValue = $env:short_site_name
-If ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) {
+If (-Not ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine"))) {
     [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
 }
 
