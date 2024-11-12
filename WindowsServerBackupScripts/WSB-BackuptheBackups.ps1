@@ -7,7 +7,7 @@
 # successful backup.
 
 # COMMON VARIABLES
-$client = $env:short_site_name # This is a Datto variable so we need a way to assign it to each host
+$client = $env:short_site_name # This is a Datto variable that is written to system ENV during deployment
 $hostname = $env:COMPUTERNAME
 $minimumNumberofRevisions = 4
 $revisionGrowthFactor = 1.15 # use this multiplier to account for potential increase in backup size
@@ -33,6 +33,7 @@ function BackupTheBackups {
     $wsbDestHostname, $wsbDestFolder = "", ""
     If ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+    $lastBackupSize = Get-SpaceUsed $wsbLastBackup
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking for protected revisions..."
@@ -75,8 +76,7 @@ function BackupTheBackups {
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking number of revisions..."
     if ((Get-CurrentNumberofRevisions) -lt $preferredNumberofRevisions) {
-        $num = $preferredNumberofRevisions
-        Write-LogAndOutput "There are fewer than $num revisions. Checking revision size and free space..."
+        Write-LogAndOutput "There are fewer than $preferredNumberofRevisions revisions. Checking revision size and free space..."
         if (((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
             Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
             [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
@@ -93,9 +93,9 @@ function BackupTheBackups {
     Write-LogAndOutput "Checking if there is enough free space for the next backup..."
     if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
         Write-LogAndOutput "Not enough free space for next backup. Deleting oldest revisions..."
-        if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
+        if(-Not(Remove-Revision $(Get-OldestRevision 1))) {Write-ReportEvents 'deleteRevisionFailed'}
         if ((Get-FreeSpace) -lt ((Get-RevisionSize) * $revisionGrowthFactor)) {
-            if(-Not(Remove-Revision $(Get-OldestRevision))) {Write-ReportEvents 'deleteRevisionFailed'}
+            if(-Not(Remove-Revision $(Get-OldestRevision 1))) {Write-ReportEvents 'deleteRevisionFailed'}
         }
     }
 
@@ -309,6 +309,15 @@ function Get-SpaceUsed($group) {
     return $result
 }
 
+# Check if an item takes an unexpected amount of space
+function Get-IfWrongSize($item,[int]$expectedSize,[float]$margin) {
+    $itemSize = Get-SpaceUsed $item
+    [int]$min = $expectedSize / $margin
+    [int]$max = $expectedSize * $margin
+    if (($itemSize -lt $min) -or ($itemSize -gt $max)) {return $true}
+    else {return $false}
+}
+
 # Calculate space taken by non-backup data and protected revisions
 function Get-NonRevisionSpace {
     [int]$reserved = 0
@@ -347,8 +356,9 @@ function Remove-Revision($rev) {
 }
 
 # Get the oldest current revision
-function Get-OldestRevision {
-    Get-CurrentRevisions | Sort-Object CreationTime | Select-Object -First 1
+function Get-OldestRevision([int]$num) {
+    $revs = Get-CurrentRevisions | Sort-Object CreationTime
+    return $revs[($num - 1)]
 }
 
 # Write results to event log
