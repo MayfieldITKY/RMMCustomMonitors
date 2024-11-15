@@ -3,8 +3,23 @@
 # is needed because backups cannot be scheduled for specific days of the week from
 # the management console. Backups for most clients should run every weekday night.
 
-# First check that Windows Server Backup is not scheduled from the management console.
-# Remove the policy if it exists
+# First check if Windows Server Backup is scheduled from the management console and
+# if this server should run backups on the weekend. If so, do nothing and leave the
+# current policy in place.
+
+
+
+# If there is a policy but weekend backups are not needed, record the policy's start
+# time as an environment variable so future backups will start at the same time. If
+# the schedule needs to be changed, it can be changed in the scheduled task.
+
+
+
+# If there is no policy, use the time from the current scheduled task. If there is
+# no task, default to 8:00 PM. If weekend backups are not needed, schedule backups
+# for Monday-Friday only.
+
+
 
 
 
