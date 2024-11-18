@@ -3,15 +3,28 @@
 # is needed because backups cannot be scheduled for specific days of the week from
 # the management console. Backups for most clients should run every weekday night.
 
+
+
 # First check if Windows Server Backup is scheduled from the management console and
 # if this server should run backups on the weekend. If so, do nothing and leave the
 # current policy in place.
+$scheduledBackup = $false
+$weekendBackup = $false
+
+If ((Get-WBSummary).NextBackupTime) {$scheduledBackup = $true}
+If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+If ($scheduledBackup -and $weekendBackup) {Write-Host "Don't do it!"; exit}
 
 
 
 # If there is a policy but weekend backups are not needed, record the policy's start
 # time as an environment variable so future backups will start at the same time. If
-# the schedule needs to be changed, it can be changed in the scheduled task.
+# the schedule needs to be changed, it can be changed in the scheduled task (not part
+# of task deployment).
+$backupStartTime = 20:00
+
+If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).NextBackupTime) -Format "HH:mm"}
+
 
 
 

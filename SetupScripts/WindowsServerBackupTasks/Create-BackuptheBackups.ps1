@@ -1,38 +1,56 @@
-# ====================== CREATE TASK: BACKUP THE BACKUPS ======================
-# Create or update a scheduled task to run WSB-BackuptheBackups.ps1.
+# ================ CREATE TASK: SCHEDULE WINDOWS SERVER BACKUP ================
+# Create or update a scheduled task to schedule Windows Server Backup jobs. This
+# is needed because backups cannot be scheduled for specific days of the week from
+# the management console. Backups for most clients should run every weekday night.
 
-# First look for an existing task using the old batch script and disable it
-$oldTaskName = "*backup*the*backups*"
-Get-ScheduledTask | Where-Object {$_.TaskName -like $oldTaskName} | Disable-ScheduledTask
+# TASK VARIABLES
+$taskName = "MITKY - Schedule Windows Server Backup"
+$newTaskName = $taskName # "MITKY - Schedule Windows Server Backup"
+$backupStartTime = "19:00"
+$taskTrigger = ""
 
-# DEFINE THESE VARIABLES
-$pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-BackuptheBackups.ps1"
-$newTaskName = "MITKY - Backup the Backups"
-$newTaskDescription = @"
-Renames backup revisions with date and rotates revisions if needed.
-This only runs after a successful Windows Server Backup.
-"@
-# Create a test task with the correct trigger and export it, then find the <Subscription> tag under <Triggers>
-$triggerSubscription = @"
-<QueryList><Query Id="0" Path="Microsoft-Windows-Backup">
-<Select Path="Microsoft-Windows-Backup">*[System[Provider[@Name='Microsoft-Windows-Backup'] and EventID=4]]
-</Select></Query></QueryList>
-"@
-$triggerDelay = "PT30M" # 30 minutes after trigger event
+# GET SCHEDULE INFORMATION
+# First check if Windows Server Backup is scheduled from the management console and
+# if this server should run backups on the weekend. If so, do nothing and leave the
+# current policy in place.
+$scheduledBackup = $false
+$weekendBackup = $false
 
-# =============================================================================
-# DO NOT CHANGE BELOW THIS LINE
+If ((Get-WBSummary).NextBackupTime) {$scheduledBackup = $true}
+#If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+If ($scheduledBackup -and $weekendBackup) {
+    Write-Host "Don't do it!"
+    #exit
+}
+
+# If there is a policy but weekend backups are not needed, use the policy's start
+# time. If there is no policy, use the time from the current scheduled task. If
+# there is no task, default to 8:00 PM.
+If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).NextBackupTime) -Format "HH:mm"}
+Elseif (Get-ScheduledTask $taskName) {$backupStartTime = Get-Date $((Get-ScheduledTask "$taskName").Triggers.StartBoundary) -Format "HH:mm"}
+#If (Get-ScheduledTask "TestTask") {$backupStartTime = Get-Date $((Get-ScheduledTask "TestTask").Triggers.StartBoundary) -Format "HH:mm"}
+
+# If weekend backups are not needed, schedule backups for Monday-Friday only.
+# If the schedule needs to be changed, it can be changed in the scheduled task (not
+# part of task deployment).
+If ($weekendBackup) {$taskTrigger = New-ScheduledTaskTrigger -Daily -At $backupStartTime} 
+Else {$taskTrigger = New-ScheduledTaskTrigger -Weekly -At $backupStartTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday} 
+
+# CREATE OTHER TASK PARAMETERS
+$pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
+
+# Task description should note the start time and if weekend backup is needed.
+$descriptionWeekend = 'WEEKDAYS ONLY'
+If ($weekendBackup) {$descriptionWeekend = 'EVERY DAY'}
+$descriptionTime = Get-Date $backupStartTime -Format "h:mm tt"
+
+$newTaskDescription = "Starts Windows Server Backup: $descriptionWeekend at $descriptionTime"
+
+# DO NOT CHANGE THESE VARIABLES
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
-
-# Task trigger on event ID
-$triggerClass = Get-cimclass MSFT_TaskEventTrigger root/Microsoft/Windows/TaskScheduler
-$taskTrigger = $triggerClass | New-CimInstance -ClientOnly
-$taskTrigger.Enabled = $true
-$taskTrigger.Subscription = $triggerSubscription
-$taskTrigger.Delay = $triggerDelay
 
 $newTaskParams = @{
   TaskName = $newTaskName
@@ -44,8 +62,10 @@ $newTaskParams = @{
   Trigger = $taskTrigger
 }
 
-# DELETE EXISTING TASK AND CREATE NEW TASK
-Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
+# CREATES THE SCHEDULED TASK
+# Check for an existing task and delete it if found. This is needed in case 
+# task schedule or other parameters have changed since the last update.
+Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
 Register-ScheduledTask @newTaskParams
 
 # Checks that the task was created successfully and is active, and write the 
