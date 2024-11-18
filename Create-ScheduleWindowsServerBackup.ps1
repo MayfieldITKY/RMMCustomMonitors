@@ -3,8 +3,13 @@
 # is needed because backups cannot be scheduled for specific days of the week from
 # the management console. Backups for most clients should run every weekday night.
 
+# TASK VARIABLES
+$taskName = "MITKY - Schedule Windows Server Backup"
+$newTaskName = $taskName # "MITKY - Schedule Windows Server Backup"
+$backupStartTime = "19:00"
+$taskTrigger = ""
 
-
+# GET SCHEDULE INFORMATION
 # First check if Windows Server Backup is scheduled from the management console and
 # if this server should run backups on the weekend. If so, do nothing and leave the
 # current policy in place.
@@ -12,47 +17,34 @@ $scheduledBackup = $false
 $weekendBackup = $false
 
 If ((Get-WBSummary).NextBackupTime) {$scheduledBackup = $true}
-If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
-If ($scheduledBackup -and $weekendBackup) {Write-Host "Don't do it!"; exit}
+#If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+If ($scheduledBackup -and $weekendBackup) {
+    Write-Host "Don't do it!"
+    #exit
+}
 
-
-
-# If there is a policy but weekend backups are not needed, record the policy's start
-# time as an environment variable so future backups will start at the same time. If
-# the schedule needs to be changed, it can be changed in the scheduled task (not part
-# of task deployment).
-$backupStartTime = 20:00
-
+# If there is a policy but weekend backups are not needed, use the policy's start
+# time. If there is no policy, use the time from the current scheduled task. If
+# there is no task, default to 8:00 PM.
 If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).NextBackupTime) -Format "HH:mm"}
+Elseif (Get-ScheduledTask $taskName) {$backupStartTime = Get-Date $((Get-ScheduledTask "$taskName").Triggers.StartBoundary) -Format "HH:mm"}
+#If (Get-ScheduledTask "TestTask") {$backupStartTime = Get-Date $((Get-ScheduledTask "TestTask").Triggers.StartBoundary) -Format "HH:mm"}
 
+# If weekend backups are not needed, schedule backups for Monday-Friday only.
+# If the schedule needs to be changed, it can be changed in the scheduled task (not
+# part of task deployment).
+If ($weekendBackup) {$taskTrigger = New-ScheduledTaskTrigger -Daily -At $backupStartTime} 
+Else {$taskTrigger = New-ScheduledTaskTrigger -Weekly -At $backupStartTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday} 
 
+# CREATE OTHER TASK PARAMETERS
+$pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
 
+# Task description should note the start time and if weekend backup is needed.
+$descriptionWeekend = 'WEEKDAYS ONLY'
+If ($weekendBackup) {$descriptionWeekend = 'EVERY DAY'}
+$descriptionTime = Get-Date $backupStartTime -Format "h:mm tt"
 
-# If there is no policy, use the time from the current scheduled task. If there is
-# no task, default to 8:00 PM. If weekend backups are not needed, schedule backups
-# for Monday-Friday only.
-
-
-
-
-
-# Check for an existing task and delete it if found. This is needed in case 
-# task schedule or other parameters have changed since the last update.
-$taskName = "MITKY - Schedule Windows Server Backup"
-Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
-
-# USE THIS SECTION FOR PARAMETERS THAT MUST BE GENERATED PROGRAMMATICALLY.
-# EXAMPLE: SCHEDULING AROUND WINDOWS SERVER BACKUP SCHEDULE.
-# $wsbPolicy = Get-WBPolicy
-# $wsbTime = Get-WBSchedule -Policy $wsbPolicy
-# $taskTriggerTime = $wsbTime.AddMinutes(-30)
-# $taskTriggerTime = $taskTriggerTime.ToString("HH:mm")
-
-# SPECIFY THESE VARIABLES
-$pathToScript = "C:\FULL\PATH\TO\SCRIPT.ps1"
-$newTaskName = "MITKY - Schedule Windows Server Backup"
-$taskTriggerTime = "HH:mm"
-$taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily # Other trigger types can be used
+$newTaskDescription = "Starts Windows Server Backup: $descriptionWeekend at $descriptionTime"
 
 # DO NOT CHANGE THESE VARIABLES
 $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $pathToScript"
@@ -60,8 +52,21 @@ $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
 
+$newTaskParams = @{
+  TaskName = $newTaskName
+  Description = $newTaskDescription
+  TaskPath = $taskPath
+  Action = $Action
+  User = $User
+  RunLevel = "Highest"
+  Trigger = $taskTrigger
+}
+
 # CREATES THE SCHEDULED TASK
-Register-ScheduledTask -TaskName $newTaskName -Trigger $taskTrigger -User $User -Action $Action -RunLevel Highest -TaskPath $taskPath
+# Check for an existing task and delete it if found. This is needed in case 
+# task schedule or other parameters have changed since the last update.
+Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
+Register-ScheduledTask @newTaskParams
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
@@ -86,4 +91,3 @@ if ($newTask.State -eq "Ready") {
   }
   Write-EventLog @params
 }
-
