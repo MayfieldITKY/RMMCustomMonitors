@@ -1,5 +1,4 @@
 # ================= SCHEDULED TASK: START WINDOWS SERVER BACKUP ===============
-
 # Start a Windows Server Backup job. 
 
 $policy = New-WBPolicy
