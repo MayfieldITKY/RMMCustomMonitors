@@ -153,8 +153,8 @@ foreach ($script in $setupScripts) {
 # CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
 # is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
 # These should NEVER contain secrets!
-$eVarName = "ShortSiteName"
-[string]$eVarValue = $env:short_site_name
+$eVarName = "datto_short_site_name"
+[string]$eVarValue = $env:ShortSiteName
 If (-Not ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine"))) {
     [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
 }
