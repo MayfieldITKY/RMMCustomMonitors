@@ -388,9 +388,17 @@ function Get-TotalSizeofVHDs {
 
 # Delete a revision
 function Remove-Revision($rev) {
-    $revName = "$rev.Name"
-    try {Remove-Item -Path $wsbDrive\$rev -Force -Recurse}
-    catch {return $revName}
+    $revPath = $rev.FullName
+    $revDeleted = $false
+    If (-Not(Test-Path $revPath -ErrorAction Ignore)) {return $true}
+    Remove-Item -Path $revPath -Force -Recurse
+    If (-Not(Test-Path $revPath -ErrorAction Ignore)) {$revDeleted = $true}
+    Else {
+        Start-Sleep 10
+        If (-Not(Test-Path $revPath -ErrorAction Ignore)) {$revDeleted = $true}
+    }
+
+    return $revDeleted
 }
 
 # Get the oldest current revision
