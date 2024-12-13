@@ -3,7 +3,8 @@
 
 $policy = New-WBPolicy
 $VMs = Get-WBVirtualMachine # | Where-Object {$_.VMName -notlike "*test*"}
-$backupLocation = New-WBBackupTarget -VolumePath "D:"
+$lastBackupTarget = $(Get-WBSummary | Select-Object -Property LastBackupTarget).LastBackupTarget
+$backupLocation = New-WBBackupTarget -VolumePath $lastBackupTarget
 
 Add-WBBackupTarget -Policy $policy -Target $backupLocation
 Add-WBVirtualMachine -Policy $policy -VirtualMachine $VMs
