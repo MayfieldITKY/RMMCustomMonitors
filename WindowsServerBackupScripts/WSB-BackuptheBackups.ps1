@@ -122,11 +122,13 @@ function BackupTheBackups {
             exit
         }
         Write-LogAndOutput "Deleting oldest revisions..."
+        Write-LogAndOutput "Deleting revision: $((Get-OldestRevision 1).FullName)"
         if (-Not(Remove-Revision $(Get-OldestRevision 1))) {
             Start-Sleep 10
             if (-Not(Remove-Revision $(Get-OldestRevision 1))) {
                 Write-ReportEvents 'deleteRevisionFailed'
                 if ((Get-CurrentNumberofRevisions) -gt 2) {
+                    Write-LogAndOutput "Deleting revision: $((Get-OldestRevision 2).FullName)"
                     if (-Not(Remove-Revision $(Get-OldestRevision 2))) {
                         Write-ReportEvents 'deleteRevisionFailed'
                         Write-ReportEvents 'notEnoughSpace'
