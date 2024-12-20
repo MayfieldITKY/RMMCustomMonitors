@@ -139,6 +139,17 @@ foreach ($script in $setupScripts) {
     & $scriptPath
 }
 
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+# Set or update environment variables such as Datto site variables or UDFs.
+# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
+# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
+# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
+# These should NEVER contain secrets!
+$eVarName = "datto_short_site_name"
+[string]$eVarValue = $env:ShortSiteName
+If (-Not ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine"))) {
+    [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+}
 
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
