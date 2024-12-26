@@ -1,15 +1,25 @@
 
+
+
+
 # DEFINE FUNCTIONS
 # Make timestamp
 function Get-Timestamp {Get-Date -Format "MM/dd/yyyy HH:mm:ss"}
 
 # Create the log file
 function New-TaskLogFile {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string]$taskLogName,
+        [Parameter(Mandatory= $false)]
+        [string]$taskLogFilePath = "C:\Scripts\Logs"
+    )
+
     if (-Not(Test-Path $taskLogFilePath)) {
         New-Item -Path $taskLogFilePath -ItemType Directory
     }
     $logDate = Get-Date -Format "yyyyMMdd-HHmm"
-    $logFileName = "BackuptheBackupsLog_$($client)_$($hostname)_$($logDate).txt"
+    $logFileName = "$($taskLogName)_$($client)_$($hostname)_$($logDate).txt"
     New-Item -Path $taskLogFilePath -Name $logFileName -ItemType File
     $script:taskLogFullName = "$taskLogFilePath\$logFileName"
 }
