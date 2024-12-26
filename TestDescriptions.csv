@@ -1,0 +1,26 @@
+TASKNAME,STATUS,EVENT ID,SOURCE,TYPE,DESCRIPTION
+WSB-BackuptheBackups,noBackupDrive,2030,Scheduled Tasks,Critical,The backup drive was not found!
+WSB-BackuptheBackups,noRevisionsFound,2031,Scheduled Tasks,Critical,No backup revisions were found! Check that Windows Server Backup is configured and the backup drive is healthy.
+WSB-BackuptheBackups,noBackupSuccess,2032,Scheduled Tasks,Error,The last Windows Server Backup was not successful! No revisions were changed.
+WSB-BackuptheBackups,renameLastBackupFailed,2033,Scheduled Tasks,Error,The last Windows Server Backup revision could not be renamed! Check that the last backup has completed or if another process has the folder or files open.
+WSB-BackuptheBackups,deleteRevisionFailed,2034,Scheduled Tasks,Error,Failed to delete previous revision! Check if it is open in another process.
+WSB-BackuptheBackups,noWindowsBackup,2035,Scheduled Tasks,Warning,Windows Server Backup is not configured for this server or has not run.
+WSB-BackuptheBackups,excessiveNonBackupData,2036,Scheduled Tasks,Warning,There are not enough backup revisions present. Removing other data from the backup drive may free enough space for more revisions.
+WSB-BackuptheBackups,notEnoughSpace,2037,Scheduled Tasks,Error,Could not create enough free space for the next backup! The next backup will most likely fail!
+WSB-BackuptheBackups,success,2039,Scheduled Tasks,Information,Backup revisions were successfully rotated.
+,,2070,Scheduled Tasks,Critical,"External backups are scheduled, but the external backup drive was not found!"
+,,2071,Scheduled Tasks,Critical,"External backups are scheduled, but no revisions are present."
+,,2072,Scheduled Tasks,Error,No external backup drive was found! External backups are not scheduled.
+,,2073,Scheduled Tasks,Error,Windows Server Backup goes directly to the external backup drive! Consider installing an internal backup drive.
+,,2074,Scheduled Tasks,Error,The last Windows Server Backup was not successful! No revisions were changed on the external backup drive.
+,,2075,Scheduled Tasks,Error,The last external backup revision could not be renamed! Check if another process has the folder or files open.
+,,2076,Scheduled Tasks,Error,Failed to rotate external backup divisions! Check if any revisions are open in another process.
+,,2079,Scheduled Tasks,Information,At least one recent backup revision is present on the external drive.
+HOST-CheckHyperVCheckpoints,,1000,Scheduled Tasks,Warning,No Virtual Machines were detected or the Get-VM cmdlet failed! Check if Hyper-V is enabled for this server or if VMs should be present.
+HOST-CheckHyperVCheckpoints,,1001,Scheduled Tasks,Warning,Hyper-V checkpoints were detected. Check if they are still needed or can be deleted. 
+HOST-CheckHyperVCheckpoints,,1009,Scheduled Tasks,Information,No Hyper-V checkpoints were detected. This does not include RDC or testing VMs.
+HOST-CheckandClearShadowCopies,,1060,Scheduled Tasks,Critical,(DO NOT USE) Deleting shadow copies critical event.
+HOST-CheckandClearShadowCopies,,1061,Scheduled Tasks,Error,"Shadow copies were found on at least one drive, but they could not be deleted!"
+HOST-CheckandClearShadowCopies,,1068,Scheduled Tasks,Information,All shadow copies were deleted or no shadow copies were found.
+,taskDeploymentFailure,102,RMM,Error,Updating or creating task $newTaskName failed!
+,taskDeploymentSuccess,109,RMM,Information,Task $newTaskName was created or updated successfully.

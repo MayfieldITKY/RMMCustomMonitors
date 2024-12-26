@@ -87,3 +87,34 @@ function Get-IfWrongSize($item,[int]$expectedSize,[float]$margin) {
     if (($itemSize -lt $min) -or ($itemSize -gt $max)) {return $true}
     else {return $false}
 }
+
+
+
+
+function Write-ReportEvents {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskName,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskStatus,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskEventID,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskSource,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskType,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskDescription
+    )
+
+    $params = @{
+        LogName = "MITKY"
+        Source = $eventTaskSource
+        EntryType = $eventTaskSource
+        EventId = $eventTaskEventID
+        Message = $eventTaskDescription
+    }
+
+    Write-EventLog @params
+    Write-LogAndOutput $params.Message
+}
