@@ -1,39 +1,11 @@
-
+#$eventDetails = Import-Csv C:\Scripts\RMMCustomMonitors\ServerMonitorFunctions\EventDetails.csv
+$eventDetails = Import-Csv "C:\Users\jfarris\OneDrive - Mayfield IT Consulting\Documents\GitHub\RMMCustomMonitors\TestDescriptions.csv"
 
 
 
 # DEFINE FUNCTIONS
 # Make timestamp
 function Get-Timestamp {Get-Date -Format "MM/dd/yyyy HH:mm:ss"}
-
-# Create the log file
-function New-TaskLogFile {
-    Param(
-        [Parameter(Mandatory= $true)]
-        [string]$taskLogName,
-        [Parameter(Mandatory= $false)]
-        [string]$taskLogFilePath = "C:\Scripts\Logs"
-    )
-
-    if (-Not(Test-Path $taskLogFilePath)) {
-        New-Item -Path $taskLogFilePath -ItemType Directory
-    }
-    $logDate = Get-Date -Format "yyyyMMdd-HHmm"
-    $logFileName = "$($taskLogName)_$($client)_$($hostname)_$($logDate).txt"
-    New-Item -Path $taskLogFilePath -Name $logFileName -ItemType File
-    $script:taskLogFullName = "$taskLogFilePath\$logFileName"
-}
-
-# Write to log file and output
-function Write-LogAndOutput($message) {
-    if (-Not ($message)) {
-        Write-Output " "
-        Add-Content -Path $taskLogFullName " "
-        return
-    }
-    Write-Output "$(Get-Timestamp): $message"
-    Add-Content -Path $taskLogFullName "$(Get-Timestamp): $message"
-} 
 
 # Check if backup destination is a network path
 function Get-ifNetworkLocation($destPath) {
@@ -88,29 +60,91 @@ function Get-IfWrongSize($item,[int]$expectedSize,[float]$margin) {
     else {return $false}
 }
 
+# =============================================================================
+# ====================== LOGGING AND REPORTING FUNCTIONS ======================
+# =============================================================================
+
+# Create a log file
+function New-TaskLogFile {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string]$taskLogName,
+        [Parameter(Mandatory= $false)]
+        [string]$taskLogFilePath = "C:\Scripts\Logs"
+    )
+
+    if (-Not(Test-Path $taskLogFilePath)) {
+        New-Item -Path $taskLogFilePath -ItemType Directory
+    }
+    $logDate = Get-Date -Format "yyyyMMdd-HHmm"
+    $logFileName = "$($taskLogName)_$($client)_$($hostname)_$($logDate).txt"
+    New-Item -Path $taskLogFilePath -Name $logFileName -ItemType File
+    $script:taskLogFullName = "$taskLogFilePath\$logFileName"
+}
+
+# Write to log file and output
+function Write-LogAndOutput($message) {
+    if (-Not ($message)) {
+        Write-Output " "
+        Add-Content -Path $taskLogFullName " "
+        return
+    }
+    Write-Output "$(Get-Timestamp): $message"
+    Add-Content -Path $taskLogFullName "$(Get-Timestamp): $message"
+} 
+
+# Look up Event Log parameters from file
+function Get-EventParameters {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskName,
+        [Parameter(Mandatory= $true)]
+        [string]$eventTaskStatus
+    )
+
+    $targetEvent = $eventDetails | Where-Object {$_.TASKNAME -like "$($eventTaskName)" -and $_.STATUS -like "$($eventTaskStatus)"}
+    if ($targetEvent) {return $targetEvent}
+    else {return $false}
+}
 
 
 
+
+
+# Write the same message to the event log, log file, and output
 function Write-ReportEvents {
     Param(
         [Parameter(Mandatory= $true)]
         [string]$eventTaskName,
         [Parameter(Mandatory= $true)]
         [string]$eventTaskStatus,
-        [Parameter(Mandatory= $true)]
-        [string]$eventTaskEventID,
-        [Parameter(Mandatory= $true)]
-        [string]$eventTaskSource,
-        [Parameter(Mandatory= $true)]
-        [string]$eventTaskType,
-        [Parameter(Mandatory= $true)]
-        [string]$eventTaskDescription
+
+        # Only use these if the event parameters are not in the reference, but
+        # it is strongly recommended to update the reference if possible instead
+        # of including these parameters in the script.
+        [Parameter(Mandatory= $false)]
+        [string]$eventTaskEventID = 9999,
+        [Parameter(Mandatory= $false)]
+        [string]$eventTaskSource = "RMM",
+        [Parameter(Mandatory= $false)]
+        [string]$eventTaskType = "Warning",
+        [Parameter(Mandatory= $false)]
+        [string[]]$eventTaskDescription = ""
     )
+
+    $targetEvent = Get-EventParameters -eventTaskName $eventTaskName -eventTaskStatus $eventTaskStatus
+    if ($targetEvent) {
+        $eventTaskEventID = $targetEvent.EVENTID
+        $eventTaskSource = $targetEvent.SOURCE
+        $eventTaskType = $targetEvent.TYPE
+        $eventTaskDescription = $targetEvent.DESCRIPTION
+    }
+    if (-Not($eventTaskDescription)) {$eventTaskDescription = "A description was not provided for this event."}
 
     $params = @{
         LogName = "MITKY"
         Source = $eventTaskSource
-        EntryType = $eventTaskSource
+        EntryType = $eventTaskType
         EventId = $eventTaskEventID
         Message = $eventTaskDescription
     }
