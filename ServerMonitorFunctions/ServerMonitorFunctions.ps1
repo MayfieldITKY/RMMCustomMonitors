@@ -83,14 +83,29 @@ function New-TaskLogFile {
 }
 
 # Write to log file and output
-function Write-LogAndOutput($message) {
-    if (-Not ($message)) {
+function Write-LogAndOutput {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string[]]$message,
+        [Parameter(Mandatory= $false)]
+        [switch]$noBlankLine
+    )
+    if (-Not ($taskLogFullName)) {
+        foreach ($line in $message) {
+            Write-Output "$(Get-Timestamp): $line"
+        }
+        if ($noBlankLine) {return}
+        Write-Output " "
+        return
+    } else {
+        foreach ($line in $message) {
+            Write-Output "$(Get-Timestamp): $line"
+            Add-Content -Path $taskLogFullName "$(Get-Timestamp): $line"
+        }
+        if ($noBlankLine) {return}
         Write-Output " "
         Add-Content -Path $taskLogFullName " "
-        return
     }
-    Write-Output "$(Get-Timestamp): $message"
-    Add-Content -Path $taskLogFullName "$(Get-Timestamp): $message"
 } 
 
 # Look up Event Log parameters from file
