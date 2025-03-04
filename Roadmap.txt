@@ -1,0 +1,6 @@
+0.5 - backup the backups, start wsb
+0.6 - wsb resolve vss error (restart services, clear shadowcopies), external drive check
+0.7 - VM tasks: Deployment type (VM or host), Previous versions, online backup check
+0.8 - Powershell module working
+0.9 - Revise scripts with module functions and logging
+1.0 - EXE installer? Working with network locations?
