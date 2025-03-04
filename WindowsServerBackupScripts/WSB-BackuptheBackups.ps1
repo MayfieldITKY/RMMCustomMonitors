@@ -164,6 +164,14 @@ There are $(Get-CurrentNumberofRevisions) current revisions. At least $preferred
 "@
     Write-LogAndOutput ""
     Write-LogAndOutput $taskResults
+
+    # Wait two minutes and start task to clear shadow copies after successful backup
+    Start-Sleep 120
+    $shadowcopyTask = "MITKY - Check and Clear Shadow Copies"
+    if (Get-ScheduledTask -TaskName $shadowcopyTask -TaskPath "MayfieldIT" -ErrorAction Ignore) {
+        Get-ScheduledTask -TaskName $shadowcopyTask -TaskPath "MayfieldIT" | Start-ScheduledTask
+    }
+
     return
 }
 
