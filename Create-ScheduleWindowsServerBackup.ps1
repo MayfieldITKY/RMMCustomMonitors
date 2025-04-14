@@ -20,7 +20,7 @@ If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
 # If there is a policy but weekend backups are not needed, use the policy's start
 # time. If there is no policy, use the time from the current scheduled task. If
 # there is no task, use the default time set above.
-If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).NextBackupTime) -Format "HH:mm"}
+If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).LastBackupTime) -Format "HH:mm"}
 Elseif (Get-ScheduledTask $taskName) {$backupStartTime = Get-Date $((Get-ScheduledTask "$taskName").Triggers.StartBoundary) -Format "HH:mm"}
 #If (Get-ScheduledTask "TestTask") {$backupStartTime = Get-Date $((Get-ScheduledTask "TestTask").Triggers.StartBoundary) -Format "HH:mm"}
 
