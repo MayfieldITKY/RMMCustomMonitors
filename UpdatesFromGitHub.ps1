@@ -1,7 +1,7 @@
 ﻿Write-Output @"
 ================== Deploy Custom Server Monitors from GitHub ==================
 ============================ Mayfield IT Consulting ===========================
-====================== Updated 05/28/2024 by Jason Farris =====================
+====================== Updated 04/15/2025 by Jason Farris =====================
 
 "@
 
