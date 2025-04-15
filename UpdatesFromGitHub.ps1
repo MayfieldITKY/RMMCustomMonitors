@@ -153,11 +153,16 @@ foreach ($script in $setupScripts) {
 # CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
 # is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
 # These should NEVER contain secrets!
-$eVarName = "datto_short_site_name"
-[string]$eVarValue = $env:ShortSiteName
-If (-Not ([System.Environment]::GetEnvironmentVariable($eVarName, "Machine"))) {
-    [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+
+function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
+    If (-Not (([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) -eq $eVarValue)) {
+        [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+    }
 }
+
+Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
+Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+
 
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
