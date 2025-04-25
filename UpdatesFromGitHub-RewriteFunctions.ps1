@@ -1,12 +1,7 @@
-﻿Write-Output @"
-================== Deploy Custom Server Monitors from GitHub ==================
+﻿<#
+================ Deploy Server Monitoring and Maintenance Tasks ===============
 ============================ Mayfield IT Consulting ===========================
-====================== Updated 04/15/2025 by Jason Farris =====================
-
-"@
-
-
-<#
+====================== Updated 04/25/2025 by Jason Farris =====================
 ======================== DO NOT RUN AS A SCHEDULED JOB! =======================
 
 This script downloads a repository from GitHub. If the repository is ever
@@ -25,6 +20,8 @@ variable and comment out or delete the line for testing.
 
 # ============ VARIABLES FOR TEMPORARY FILES AND SCRIPT DESTINATION ===========
 # ========= DO NOT CHANGE IN RMM! Update the GitHub repository instead ========
+$hostname = $env:COMPUTERNAME
+$client = $env:ShortSiteName
 $runDate = Get-Date
 $updateDate = Get-Date -Format "yyyyMMdd"
 $updateTempPath = "C:\Scripts\Temp\$updateDate-RMMCustomMonitors"
@@ -36,13 +33,157 @@ if ($env:updateRepository) {$updateRepo = $env:updateRepository}
 $updateRepoFileName = "$updateRepo.zip"
 
 
-# MAIN FUNCTION
+# =============================== MAIN FUNCTION ===============================
 function main {
-    Write-UpdateLogAndOutput ""
+    # Start log file
+    New-UpdateLogFile
+    Write-UpdateLogAndOutput @"
+================ Deploy Server Monitoring and Maintenance Tasks ===============
+============================ Mayfield IT Consulting ===========================
+====================== Updated 04/25/2025 by Jason Farris =====================
+
+Deployment run on: $runDate
+Deploying branch: $updateRepo
+
+"@ -NoTimestamp
+
+# =========================== CREATE MITKY EVENT LOG ==========================
+    # Creates custom event log for RMM monitoring and maintenance scripts. This is
+    # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
+    # THEN NO RMM MONITORS WILL WORK!
+    Write-UpdateLogAndOutput "Creating or updating custom event log..."
+    $eventSources = @(
+        "Scheduled Tasks",
+        "Maintenance Tasks",
+        "RMM"
+    )
+    foreach ($source in $eventSources) {
+        New-EventLog -Source $source -LogName "MITKY" -ErrorAction Ignore
+    }
+    if (Get-EventLog -List | Where-Object {$_.Log -like "MITKY"}) {
+        Write-UpdateLogAndOutput "Event log MITKY updated successfully!"
+    } else {
+        Write-UpdateLogAndOutput "Event log MITKY not found! RMM monitoring will not work without this log!"
+    }
+
+# ================== DOWNLOAD REPOSITORY FILE TO TEMP FOLDER ==================
+    # If the temp path already exists (it should not because it contains the current
+    # date!), delete it. Create the temp path
+    If (Test-Path $updateTempPath) {
+        Write-UpdateLogAndOutput "Removing previous temp folder..."
+        Remove-Item $updateTempPath -Recurse -Force
+        Start-Sleep 10
+    }
+    If (-Not(Test-Path $updateTempPath)) {
+        Write-UpdateLogAndOutput "Creating temp folder for download..."
+        New-Item -ItemType Directory -Path $updateTempPath
+        Start-Sleep 10
+    }
+
+    # Set TLS version and get file
+    Write-UpdateLogAndOutput "Downloading current repository..."
+    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
+    Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
+    Start-Sleep 10
+    # Wait a while to download for slow connections
+    # ($waitTries + 1) * 10 = total wait time in seconds
+    $waitTries = 5
+    $tries = 0
+    while ($tries++ -lt $waitTries) {
+        If (Test-Path $updateFilePath) {break}
+        Write-UpdateLogAndOutput "Waiting for file download..."
+        Start-Sleep 10
+    }
+
+    If (-Not (Test-Path $updateFilePath)) {
+        Write-UpdateLogAndOutput "Could not download repository! Check that the branch named $updateRepo is correct and is uploaded."
+        return "noDownload"
+    }
+
+    # Compare the downloaded file to the last update file. If they are the same, no update is needed
+    Write-UpdateLogAndOutput "Checking if update is needed..."
+    $updateHash = Get-FileHash $updateFilePath -Algorithm SHA256
+    $updateNeeded = $true
+
+    If (Get-ChildItem -Path C:\scripts -Attributes Directory | Where-Object {$_.Name -like "RMMCustomMonitors"}) {
+        $lastUpdateHash = Get-Content -Path "$scriptsDestination\LastUpdateHash.txt"
+        If ($lastUpdateHash -eq $updateHash.Hash) {$updateNeeded = $false}
+        else {Write-UpdateLogAndOutput "There are updated files. Proceeding..."}
+    }
+
+    If (-Not($updateNeeded)) {
+        Write-UpdateLogAndOutput "RMMCustomMonitors are already up to date. Exiting..."
+        Remove-Item $updateTempPath -Recurse -Force
+        return "noUpdates"
+    }
+
+# =============== EXTRACT DOWNLOAD AND COPY TO TARGET DIRECTORY ===============
+    Write-UpdateLogAndOutput "Extracting files..."
+    Expand-UpdatePackage $updateFilePath $updateTempPath
+    Start-Sleep 10
+
+    $updateRepository = Get-ChildItem $updateTempPath -Directory -Attributes !H
+    $expandedArchive = Get-ChildItem $updateRepository.FullName -Directory -Attributes !H
+    
+    # Remove previous files and recreate directory
+    Write-UpdateLogAndOutput "Deleting old files..."
+    If (Test-Path $scriptsDestination -ErrorAction Ignore) {
+        Remove-Item $scriptsDestination -Recurse -Force
+        Start-Sleep 10
+    }
+    If (-Not(Test-Path $scriptsDestination -ErrorAction Ignore)) {
+        New-Item -ItemType Directory -Path $scriptsDestination
+        Start-Sleep 10
+    }
+    
+    # Copy files
+    Write-UpdateLogAndOutput "Copying files to $scriptsDestination..."
+    foreach ($dir in $expandedArchive) {
+        $dirDestination = "$scriptsDestination\$dir"
+        $dirPath = $dir.FullName
+        Copy-Item -Path $dirPath -Destination $dirDestination -Recurse -Force
+        Start-Sleep 10
+    }
+    
+    # Store the hash for this update so it can be compared to future updates
+    Write-UpdateLogAndOutput "Storing update version..."
+    Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
+
+# =========================== CREATE SCHEDULED TASKS ==========================
+    # DISABLE scheduled tasks with name starting with "MITKY*"
+    Write-UpdateLogAndOutput "Disabling previous tasks..."
+    $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
+    foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
+
+    # Get list of setup scripts and run each script. Scripts should check for
+    # existing tasks and delete them before creating
+    Write-UpdateLogAndOutput "Running setup scripts for scheduled tasks..."
+    $setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1
+
+    foreach ($script in $setupScripts) {
+        Write-UpdateLogAndOutput "Running $script..."
+        $scriptPath = $script.FullName
+        & $scriptPath
+    }
+
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+# Set or update environment variables such as Datto site variables or UDFs.
+# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
+# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
+# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
+# These should NEVER contain secrets!
+    Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
+    Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+
+# ============================= CLEANUP TEMP FILES ============================
+    # Delete temporary files
+    Write-UpdateLogAndOutput "Update completed! Cleaning up temporary files and reporting results..."
+    Remove-Item $updateTempPath -Recurse -Force
+    return "updateFinished"
 
 }
 
-# FUNCTIONS
+# ============================== DEFINE FUNCTIONS =============================
 function Get-Timestamp {Get-Date -Format "MM/dd/yyyy HH:mm:ss"}
 
 # Create the log file
@@ -85,145 +226,78 @@ function Write-UpdateLogAndOutput {
     }
 } 
 
-
-
-
-
-
-
-
-Write-Output @"
-Deployment run on: $runDate
-Deploying branch: $updateRepo
-"@
-
-# If the temp path already exists (it should not because it contains the current
-# date!), delete it. Create the temp path
-If (Test-Path $updateTempPath) {
-    Write-Output "Removing previous temp folder..."
-    Remove-Item $updateTempPath -Recurse -Force
-    Start-Sleep 10
-}
-If (-Not(Test-Path $updateTempPath)) {
-    Write-Output "Creating temp folder for download..."
-    New-Item -ItemType Directory -Path $updateTempPath
-    Start-Sleep 10
-}
-
-
-# ================== DOWNLOAD REPOSITORY FILE TO TEMP FOLDER ==================
-# Set TLS version and get file
-Write-Output "Downloading current repository..."
-[Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
-Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
-Start-Sleep 10
-
-# Compare the downloaded file to the last update file. If they are the same, no update is needed
-Write-Output "Checking if update is needed..."
-$updateHash = Get-FileHash $updateFilePath -Algorithm SHA256
-$updateNeeded = $true
-
-If (Get-ChildItem -Path C:\scripts -Attributes Directory | Where-Object {$_.Name -like "RMMCustomMonitors"}) {
-    $lastUpdateHash = Get-Content -Path "$scriptsDestination\LastUpdateHash.txt"
-    If ($lastUpdateHash -eq $updateHash.Hash) {$updateNeeded = $false}
-    else {Write-Output "There are updated files. Proceeding..."}
-}
-
-If (-Not($updateNeeded)) {
-    Write-Output "RMMCustomMonitors are already up to date. Exiting..."
-    Remove-Item $updateTempPath -Recurse -Force
-    # Need to report to event log here!
-    exit
-}
-
-
-# ============= EXTRACT DOWNLOAD AND COPY TO TARGET DIRECTORY ===========
-# Extraction function uses .NET methods for compatibility with Powershell
-# v4.0 on Server 2012R2
-Write-Output "Extracting files..."
+# Extract downloaded file: Extraction function uses .NET methods for compatibility
+# with Powershell v4.0 on Server 2012R2
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 function Expand-UpdatePackage {
     param([string]$zipfile, [string]$outpath)
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)
+    if (-Not (Test-Path $zipfile)) {
+        Write-UpdateLogAndOutput "The target package file does not exist!"
+        return
+    } else {[System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)}
 }
 
-Expand-UpdatePackage $updateFilePath $updateTempPath
-Start-Sleep 10
-
-$updateRepository = Get-ChildItem $updateTempPath -Directory -Attributes !H
-$expandedArchive = Get-ChildItem $updateRepository.FullName -Directory -Attributes !H
-
-# Remove previous files and recreate directory
-Write-Output "Deleting old files..."
-If (Test-Path $scriptsDestination -ErrorAction Ignore) {
-    Remove-Item $scriptsDestination -Recurse -Force
-    Start-Sleep 10
-}
-If (-Not(Test-Path $scriptsDestination -ErrorAction Ignore)) {
-    New-Item -ItemType Directory -Path $scriptsDestination
-    Start-Sleep 10
-}
-
-# Copy files
-Write-Output "Copying files to $scriptsDestination..."
-foreach ($dir in $expandedArchive) {
-    $dirDestination = "$scriptsDestination\$dir"
-    $dirPath = $dir.FullName
-    Copy-Item -Path $dirPath -Destination $dirDestination -Recurse -Force
-    Start-Sleep 10
-}
-
-# Store the hash for this update so it can be compared to future updates
-Write-Output "Storing update version..."
-Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
-
-
-# =========================== CREATE SCHEDULED TASKS ==========================
-# Creates custom event log for RMM monitoring and maintenance scripts. This is
-# the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
-# THEN NO RMM MONITORS WILL WORK!
-Write-Output "Creating or updating custom event log..."
-New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
-Get-WinEvent -ListLog MITKY
-
-# DISABLE scheduled tasks with name starting with "MITKY*"
-Write-Output "Disabling previous tasks..."
-$mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
-foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
-
-# Get list of setup scripts and run each script. Scripts should check for
-# existing tasks and delete them before creating
-Write-Output "Running setup scripts for scheduled tasks..."
-$setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1
-
-foreach ($script in $setupScripts) {
-    Write-Output "Running $script..."
-    $scriptPath = $script.FullName
-    & $scriptPath
-}
-
-
-# ======================== CREATE ENVIRONMENT VARIABLES =======================
-# Set or update environment variables such as Datto site variables or UDFs.
-# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
-# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
-# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
-# These should NEVER contain secrets!
-
-function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
+# Create environment variables
+function Set-CustomSystemVariable {
+    Param(
+        [Parameter(Mandatory= $true)]
+        [string]$eVarName,
+        [Parameter(Mandatory= $true)]
+        [string]$eVarValue 
+    )
     If (-Not (([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) -eq $eVarValue)) {
         [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
     }
+    [string]$newVarValue = "$([System.Environment]::GetEnvironmentVariable($eVarName, "Machine"))"
+    If ($newVarValue -eq $eVarValue) {
+        Write-UpdateLogAndOutput "System variable $eVarName successfully updated to $newVarValue"
+    } else {
+        Write-UpdateLogAndOutput "System variable $eVarName did not update correctly!"
+    }
 }
 
-Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
-Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+# =================== PERFORM TASKS AND REPORT TO EVENT LOG ===================
+$resultMessage = ""
+$reportParams = @{
+    LogName = "MITKY"
+    Source = "RMM"
+    EntryType = ""
+    EventId = ""
+    Message = ""
+}
 
+switch (main) {
+#switch ($(("noDownload","noUpdates","updateFinished","somethingElse") | Get-Random)) {
+    "noDownload" {
+        $reportParams.EntryType = "Error"
+        $reportParams.EventID = 1
+        $resultMessage = "FAILED to download repository file!"
+    }
+    "noUpdates" {
+        $reportParams.EntryType = "Information"
+        $reportParams.EventID = 1
+        $resultMessage = "NO UPDATES available"
+    }
+    "updateFinished" {
+        $reportParams.EntryType = "Information"
+        $reportParams.EventID = 1
+        $resultMessage = "Finished updating. Check individual tasks to confirm results!"
+    }
+    default {
+        $reportParams.EntryType = "Error"
+        $reportParams.EventID = 1
+        $resultMessage = "Updates stopped for unknown reason!"
+    }
+}
 
-# ============================= CLEANUP AND REPORT ============================
-# Delete temporary files
-Write-Output "Update completed! Cleaning up temporary files and reporting results..."
-Remove-Item $updateTempPath -Recurse -Force
+$updateLogReport = Get-Content $updateLogFullName
+$reportParams.Message = @"
+$resultMessage
 
-# Write to event log (not yet implemented)
+FULL REPORT FROM LOG FILE: $updateLogFullName
 
+$updateLogReport
+
+"@
+
+Write-EventLog @reportParams
