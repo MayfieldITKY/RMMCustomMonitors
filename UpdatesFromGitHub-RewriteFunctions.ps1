@@ -270,22 +270,22 @@ switch (main) {
 #switch ($(("noDownload","noUpdates","updateFinished","somethingElse") | Get-Random)) {
     "noDownload" {
         $reportParams.EntryType = "Error"
-        $reportParams.EventID = 1
+        $reportParams.EventID = 111
         $resultMessage = "FAILED to download repository file!"
     }
     "noUpdates" {
         $reportParams.EntryType = "Information"
-        $reportParams.EventID = 1
+        $reportParams.EventID = 113
         $resultMessage = "NO UPDATES available"
     }
     "updateFinished" {
         $reportParams.EntryType = "Information"
-        $reportParams.EventID = 1
+        $reportParams.EventID = 114
         $resultMessage = "Finished updating. Check individual tasks to confirm results!"
     }
     default {
         $reportParams.EntryType = "Error"
-        $reportParams.EventID = 1
+        $reportParams.EventID = 112
         $resultMessage = "Updates stopped for unknown reason!"
     }
 }
