@@ -114,9 +114,9 @@ function BackupTheBackups {
     # or only the last backup remains
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking if there is enough free space for the next backup..."
+    $targetFreeSpace = ($expectedRevisionSize * $revisionGrowthFactor) + $freeSpaceBuffer
     while ((Get-FreeSpace) -lt ($expectedRevisionSize * $revisionGrowthFactor)) {
-        $targetFreeSpace = "$($expectedRevisionSize * $revisionGrowthFactor) GB"
-        Write-LogAndOutput "Not enough free space for next backup. Need $targetFreeSpace free."
+        Write-LogAndOutput "Not enough free space for next backup. Need $targetFreeSpace GB free."
         if ($(Get-OldestRevision 1).Name -eq $(Get-OldestRevision -1).Name) {
             Write-ReportEvents 'notEnoughSpace'
             exit
