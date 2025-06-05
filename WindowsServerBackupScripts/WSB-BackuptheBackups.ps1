@@ -23,6 +23,7 @@ function BackupTheBackups {
     Write-LogAndOutput "Beginning task 'BACKUP THE BACKUPS' at $(Get-Date)..."
         
     # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
+    Write-LogAndOutput "Checking if last backup was successful..."
     Get-LastBackupSuccess
 
     # COMMON VARIABLES
@@ -32,6 +33,7 @@ function BackupTheBackups {
     $wsbDestHostname, $wsbDestFolder = "", ""
     if ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
+    if (-Not ($wsbLastBackup)) {$wsbLastBackup = Get-OldestRevision -1}
     $lastBackupSize = Get-SpaceUsed $wsbLastBackup
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput ""
@@ -209,11 +211,11 @@ function Get-AllBackups {
 
 # Check for successful backup
 function Get-LastBackupSuccess {
-    Write-LogAndOutput "Checking if last backup was successful..."
     try {Get-WBSummary}
     catch {
         Write-ReportEvents 'noWindowsBackup'
-        exit
+        return $false
+        #exit
     }
     $LastWSBDate = (Get-WBSummary).LastBackupTime
     $LastDay = (Get-Date).AddHours(-24)
@@ -223,7 +225,8 @@ function Get-LastBackupSuccess {
     
     if (-Not($LastWSBSuccessEvent)) {
         Write-ReportEvents 'noBackupSuccess'
-        exit
+        return $false
+        #exit
     }      
 }
 
@@ -250,8 +253,10 @@ function Get-NetworkDrive($destPath) {
 }
 
 # Rename a backup to append the client name and date
+
 function Get-RevisionNewName($rev) {
-    $revDate = Get-Date $rev.CreationTime -Format "yyyyMMdd-HHmm"    
+    $revContent = Get-ChildItem $rev.FullName | Sort-Object LastWriteTime
+    $revDate = Get-Date ($revContent[-1]).LastWriteTime -Format "yyyyMMdd-HHmm"    
     $revNewName = "$($client)_$($hostname)_WindowsImageBackup_$($revDate)"
     return $revNewName
 }
