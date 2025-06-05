@@ -2,6 +2,15 @@
 # Start a Windows Server Backup job. 
 
 
+
+
+
+
+
+
+
+
+<#
 #region COMMON VARIABLES
 $client = $env:short_site_name # This is a Datto variable that is written to system ENV during deployment
 $hostname = $env:COMPUTERNAME
@@ -498,3 +507,4 @@ function Write-ReportEvents($status) {
 
 # CALL MAIN FUNCTION
 Start-BackupTheBackups
+#>
