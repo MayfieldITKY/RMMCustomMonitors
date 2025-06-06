@@ -21,10 +21,6 @@ function BackupTheBackups {
     # Start the log file
     New-TaskLogFile
     Write-LogAndOutput "Beginning task 'BACKUP THE BACKUPS' at $(Get-Date)..."
-        
-    # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
-    Write-LogAndOutput "Checking if last backup was successful..."
-    Get-LastBackupSuccess
 
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
@@ -58,6 +54,24 @@ function BackupTheBackups {
     $expectedRevSizeSource = 'current'
 
     # DO THINGS
+    # If there are no backup revisions at all, skip to checking free space.
+    # If the last backup was successful, rename the backup with the date. If not,
+    # rename it appending 'FAILED'. If the backup was already renamed, do nothing.
+    if (-Not ($wsbLastBackup)) {}
+    elseif ($wsbLastBackup.Name -eq "WindowsImageBackup") {
+        function Rename-LastBackup() {
+            if (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
+            else {Rename-Backup $wsbLastBackup -Failed}
+        }
+        Rename-LastBackup
+        Start-Sleep 3
+        if (Test-Path $wsbLastBackup.FullName) {
+            Rename-LastBackup
+            Start-Sleep 3
+            if (Test-Path $wsbLastBackup.FullName) {Write-ReportEvents 'renameLastBackupFailed'}
+        }
+    }
+
     # check if the last backup size is much larger or smaller than the expected revision size
     # if it is, also check it against the total current size of VHDs included in the backup
     # if the size of the backup is consistent with the size of VHDs, use the larger value for
@@ -76,20 +90,6 @@ function BackupTheBackups {
         $expectedRevisionSize = $lastBackupSize
         $expectedRevSizeSource = 'last'
     }
-
-    # try to rename last backup with client, hostname, and backup date
-    Write-LogAndOutput ""
-    Write-LogAndOutput "Renaming last backup..."
-    if (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
-    if (Test-Path $wsbLastBackup.FullName) {
-        Start-Sleep 10
-        Rename-Backup $wsbLastBackup
-        Start-Sleep 10
-        if (Test-Path $wsbLastBackup.FullName) {
-            Write-ReportEvents 'renameLastBackupFailed'
-            exit
-        }
-    }    
 
     # rename any legacy revisions (named with _old, _older, _oldest)
     if ($legacyRevisions) {
@@ -215,7 +215,6 @@ function Get-LastBackupSuccess {
     catch {
         Write-ReportEvents 'noWindowsBackup'
         return $false
-        #exit
     }
     $LastWSBDate = (Get-WBSummary).LastBackupTime
     $LastDay = (Get-Date).AddHours(-24)
@@ -226,7 +225,6 @@ function Get-LastBackupSuccess {
     if (-Not($LastWSBSuccessEvent)) {
         Write-ReportEvents 'noBackupSuccess'
         return $false
-        #exit
     }      
 }
 

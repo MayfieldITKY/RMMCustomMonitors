@@ -16,25 +16,32 @@ $oldRevisionCutoff = -30 # revisions older than this many days are considered ol
 $taskLogFilePath = "C:\Scripts\Logs"
 $taskLogFullName = ""
 
+
+
+
+
+
+
+
+
+
 #region MAIN FUNCTION
 function BackupTheBackups {
     # Start the log file
     New-TaskLogFile
     Write-LogAndOutput "Beginning task 'BACKUP THE BACKUPS' at $(Get-Date)..."
         
-    # CHECK FOR SUCCESSFUL BACKUP BEFORE DOING ANYTHING
-    Write-LogAndOutput "Checking if last backup was successful..."
-    Get-LastBackupSuccess
-
     # COMMON VARIABLES
     $wsbDrive = (Get-WBSummary).LastBackupTarget
     $wsbDriveName = $wsbDrive.Replace(":","")
     $wsbDestIsNetworkLocation = Get-ifNetworkLocation $wsbDrive
     $wsbDestHostname, $wsbDestFolder = "", ""
-    if ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
+    if ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}
+
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
     if (-Not ($wsbLastBackup)) {$wsbLastBackup = Get-OldestRevision -1}
     $lastBackupSize = Get-SpaceUsed $wsbLastBackup
+    
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking for protected revisions..."
@@ -48,9 +55,11 @@ function BackupTheBackups {
     else {Write-LogAndOutput "No old revisions found."}
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking for other data on the backup drive..."
+
     $nonBackupData = Get-ChildItem $wsbDrive | Where-Object {$_.Name -notlike "*WindowsImageBackup*"}
     if ($nonBackupData) {foreach ($item in $nonBackupData) {Write-LogAndOutput $item.FullName}}
     else {Write-LogAndOutput "No other data found."}
+    
     [int]$wsbDriveSpace = Get-TotalSpace
     [int]$reservedSpace = Get-NonRevisionSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
@@ -58,10 +67,38 @@ function BackupTheBackups {
     $expectedRevSizeSource = 'current'
 
     # DO THINGS
+    # If there are no backup revisions at all, skip to checking free space.
+    # If the last backup was successful, rename the backup with the date. If not,
+    # rename it appending 'FAILED'. If the backup was already renamed, do nothing.
+    if (-Not ($wsbLastBackup)) {}
+    elseif ($wsbLastBackup.Name -eq "WindowsImageBackup") {
+        function Rename-LastBackup() {
+            if (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
+            else {Rename-Backup $wsbLastBackup -Failed}
+        }
+        Rename-LastBackup
+        Start-Sleep 3
+        if (Test-Path $wsbLastBackup.FullName) {
+            Rename-LastBackup
+            Start-Sleep 3
+            if (Test-Path $wsbLastBackup.FullName) {Write-ReportEvents 'renameLastBackupFailed'}
+        }
+    }
+
+
+
+
+
     # check if the last backup size is much larger or smaller than the expected revision size
     # if it is, also check it against the total current size of VHDs included in the backup
     # if the size of the backup is consistent with the size of VHDs, use the larger value for
     # the expected revision size. If not, use the total VHD size
+
+
+
+
+
+
     if (Get-IfWrongSize $wsbLastBackup $expectedRevisionSize $revisionGrowthFactor) {
         $vhdTotalSpace = Get-TotalSizeofVHDs
         $expectedRevisionSize = $vhdTotalSpace
@@ -76,20 +113,6 @@ function BackupTheBackups {
         $expectedRevisionSize = $lastBackupSize
         $expectedRevSizeSource = 'last'
     }
-
-    # try to rename last backup with client, hostname, and backup date
-    Write-LogAndOutput ""
-    Write-LogAndOutput "Renaming last backup..."
-    if (Get-LastBackupSuccess) {Rename-Backup $wsbLastBackup}
-    if (Test-Path $wsbLastBackup.FullName) {
-        Start-Sleep 10
-        Rename-Backup $wsbLastBackup
-        Start-Sleep 10
-        if (Test-Path $wsbLastBackup.FullName) {
-            Write-ReportEvents 'renameLastBackupFailed'
-            exit
-        }
-    }    
 
     # rename any legacy revisions (named with _old, _older, _oldest)
     if ($legacyRevisions) {
@@ -254,15 +277,27 @@ function Get-NetworkDrive($destPath) {
 
 # Rename a backup to append the client name and date
 
-function Get-RevisionNewName($rev) {
+function Get-RevisionNewName {
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        $rev,
+        [switch]$Failed
+    )
     $revContent = Get-ChildItem $rev.FullName | Sort-Object LastWriteTime
     $revDate = Get-Date ($revContent[-1]).LastWriteTime -Format "yyyyMMdd-HHmm"    
     $revNewName = "$($client)_$($hostname)_WindowsImageBackup_$($revDate)"
+    if ($Failed) {$revNewName = "WindowsImageBackup_$($revDate)_FAILED"}
     return $revNewName
 }
 
-function Rename-Backup($rev) {
+function Rename-Backup {
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        $rev,
+        [switch]$Failed
+    )
     $revNewName = Get-RevisionNewName $rev
+    if ($Failed) {$revNewName = Get-RevisionNewName $rev -Failed}
     if (-Not($rev.Name -like $revNewName)) {
         Write-LogAndOutput "Renaming revision: $($rev.Name)..."
         $rev | Rename-Item -NewName $revNewName
@@ -380,7 +415,8 @@ function Get-NonRevisionSpace {
 
 # Calculate the total current size of VHDs included in the backup
 function Get-TotalSizeofVHDs {
-    $backupVMs = Get-WBVirtualMachine | Where-Object {$_.VMName -notlike "Host Component"}
+    $skipVMsNamed = "Host Component", "*test*", "*no*back*up*", "*(dbu)*"
+    $backupVMs = Get-WBVirtualMachine | Where-Object {$_.VMName -notlike $skipVMsNamed}
     $backupVHDs = @()
     foreach ($vm in $backupVMs) {
         $vm = Get-VM -Name $vm.VMName

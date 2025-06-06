@@ -18,8 +18,8 @@ function Get-FreeSpace {
 }
 
 function Get-TotalSizeofVHDs {
-    $skipVMsNamed = "*test*", "*no*back*up*", "*(dbu)*"
-    $backupVMs = Get-WBVirtualMachine | Where-Object {($_.VMName -notlike $skipVMsNamed) -and ($_.VMName -notlike "Host Component")}
+    $skipVMsNamed = "Host Component", "*test*", "*no*back*up*", "*(dbu)*"
+    $backupVMs = Get-WBVirtualMachine | Where-Object {$_.VMName -notlike $skipVMsNamed}
     $backupVHDs = @()
     foreach ($vm in $backupVMs) {
         $vm = Get-VM -Name $vm.VMName
