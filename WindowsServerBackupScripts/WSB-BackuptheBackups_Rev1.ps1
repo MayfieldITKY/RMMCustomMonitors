@@ -251,27 +251,16 @@ function Get-NetworkDrive($destPath) {
 }
 
 # Rename a backup to append the client name and date
-function Get-RevisionNewName {
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        $rev,
-        [switch]$Failed
-    )
+
+function Get-RevisionNewName($rev) {
     $revContent = Get-ChildItem $rev.FullName | Sort-Object LastWriteTime
     $revDate = Get-Date ($revContent[-1]).LastWriteTime -Format "yyyyMMdd-HHmm"    
     $revNewName = "$($client)_$($hostname)_WindowsImageBackup_$($revDate)"
-    if ($Failed) {$revNewName = "WindowsImageBackup_$($revDate)_FAILED"}
     return $revNewName
 }
 
-function Rename-Backup {
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        $rev,
-        [switch]$Failed
-    )
+function Rename-Backup($rev) {
     $revNewName = Get-RevisionNewName $rev
-    if ($Failed) {$revNewName = Get-RevisionNewName $rev -Failed}
     if (-Not($rev.Name -like $revNewName)) {
         Write-LogAndOutput "Renaming revision: $($rev.Name)..."
         $rev | Rename-Item -NewName $revNewName
