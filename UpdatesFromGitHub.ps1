@@ -121,6 +121,22 @@ foreach ($dir in $expandedArchive) {
 Write-Output "Storing update version..."
 Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
 
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+# Set or update environment variables such as Datto site variables or UDFs.
+# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
+# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
+# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
+# These should NEVER contain secrets!
+
+function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
+    If (-Not (([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) -eq $eVarValue)) {
+        [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
+    }
+}
+
+Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
+Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+
 
 # =========================== CREATE SCHEDULED TASKS ==========================
 # Creates custom event log for RMM monitoring and maintenance scripts. This is
@@ -145,23 +161,6 @@ foreach ($script in $setupScripts) {
     $scriptPath = $script.FullName
     & $scriptPath
 }
-
-
-# ======================== CREATE ENVIRONMENT VARIABLES =======================
-# Set or update environment variables such as Datto site variables or UDFs.
-# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
-# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
-# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
-# These should NEVER contain secrets!
-
-function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
-    If (-Not (([System.Environment]::GetEnvironmentVariable($eVarName, "Machine")) -eq $eVarValue)) {
-        [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
-    }
-}
-
-Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
-Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
 
 # ============================= CLEANUP AND REPORT ============================
