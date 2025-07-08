@@ -151,10 +151,26 @@ Write-Output "Disabling previous tasks..."
 $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
 foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
 
+# Get a list of scripts in the RunFirst folder and run them in the correct order
+$runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
+$runFirstList = Get-Content -Path "$runFirstPath\runFirstList.txt"
+foreach ($line in $runFirstList) {
+    if ($line -notlike "#*") {
+        if (($line -like "*.ps1") -or ($line -like "*.bat") -or ($line -like "*.reg")) {
+            if (-Not (Test-Path "$runFirstPath\$line" -ErrorAction Ignore)) {continue}
+            else {
+                Write-Output "Running $line..."
+                $scriptPath = "$runFirstPath\$line"
+                & $scriptPath
+            }
+        }
+    }
+}
+
 # Get list of setup scripts and run each script. Scripts should check for
 # existing tasks and delete them before creating
 Write-Output "Running setup scripts for scheduled tasks..."
-$setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1
+$setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1 | Where-Object {$_.FullName -notlike "*RunFirst*"}
 
 foreach ($script in $setupScripts) {
     Write-Output "Running $script..."
