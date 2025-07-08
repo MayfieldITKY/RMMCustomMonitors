@@ -10,15 +10,10 @@ $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-Bac
 $newTaskName = "MITKY - Backup the Backups"
 $newTaskDescription = @"
 Renames backup revisions with date and rotates revisions if needed.
-This only runs after a successful Windows Server Backup.
+Failed backups will also be removed.
+This runs before any scheduled backup. If backups do not run on weekends, 
+this should also run after Friday's backup.
 "@
-# Create a test task with the correct trigger and export it, then find the <Subscription> tag under <Triggers>
-$triggerSubscription = @"
-<QueryList><Query Id="0" Path="Microsoft-Windows-Backup">
-<Select Path="Microsoft-Windows-Backup">*[System[Provider[@Name='Microsoft-Windows-Backup'] and EventID=4]]
-</Select></Query></QueryList>
-"@
-$triggerDelay = "PT30M" # 30 minutes after trigger event
 
 # =============================================================================
 # DO NOT CHANGE BELOW THIS LINE
@@ -26,13 +21,22 @@ $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
+$startTime = $env:backup_the_backups_time
+$taskTriggers = @()
 
-# Task trigger on event ID
-$triggerClass = Get-cimclass MSFT_TaskEventTrigger root/Microsoft/Windows/TaskScheduler
-$taskTrigger = $triggerClass | New-CimInstance -ClientOnly
-$taskTrigger.Enabled = $true
-$taskTrigger.Subscription = $triggerSubscription
-$taskTrigger.Delay = $triggerDelay
+$weekendBackup = $false
+if ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+If ($weekendBackup) {
+    $taskTrigger = New-ScheduledTaskTrigger -Daily -At $startTime
+    $taskTriggers += $taskTrigger
+} 
+Else {
+    $taskTrigger1 = New-ScheduledTaskTrigger -Weekly -At $startTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday
+    $saturdayTime = Get-Date $((Get-Date $startTime).AddHours(12)) -Format "HH:mm"
+    $taskTrigger2 = New-ScheduledTaskTrigger -Weekly -At $saturdayTime -DaysOfWeek Saturday
+    $taskTriggers += $taskTrigger1, $taskTrigger2
+}
+
 
 $newTaskParams = @{
   TaskName = $newTaskName
@@ -41,7 +45,7 @@ $newTaskParams = @{
   Action = $Action
   User = $User
   RunLevel = "Highest"
-  Trigger = $taskTrigger
+  Trigger = $taskTriggers
 }
 
 # DELETE EXISTING TASK AND CREATE NEW TASK

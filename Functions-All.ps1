@@ -87,3 +87,25 @@ function Get-IfWrongSize($item,[int]$expectedSize,[float]$margin) {
     if (($itemSize -lt $min) -or ($itemSize -gt $max)) {return $true}
     else {return $false}
 }
+
+
+
+<#
+Task trigger based on event log
+
+# Create a test task with the correct trigger and export it, then find the <Subscription> tag under <Triggers>
+$triggerSubscription = @"
+<QueryList><Query Id="0" Path="Microsoft-Windows-Backup">
+<Select Path="Microsoft-Windows-Backup">*[System[Provider[@Name='Microsoft-Windows-Backup'] and EventID=4]]
+</Select></Query></QueryList>
+"@
+
+$triggerDelay = "PT30M" # 30 minutes after trigger event
+
+$triggerClass = Get-cimclass MSFT_TaskEventTrigger root/Microsoft/Windows/TaskScheduler
+$taskTrigger = $triggerClass | New-CimInstance -ClientOnly
+$taskTrigger.Enabled = $true
+$taskTrigger.Subscription = $triggerSubscription
+$taskTrigger.Delay = $triggerDelay
+
+#>
