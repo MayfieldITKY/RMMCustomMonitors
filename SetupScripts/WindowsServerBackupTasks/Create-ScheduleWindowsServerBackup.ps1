@@ -5,7 +5,7 @@
 
 # TASK VARIABLES
 $taskName = "MITKY - Schedule Windows Server Backup"
-$newTaskName = $taskName # "MITKY - Schedule Windows Server Backup"
+$newTaskName = $taskName # "MITKY - Start Windows Server Backup"
 $backupStartTime = "20:00"
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
 

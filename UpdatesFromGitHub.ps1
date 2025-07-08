@@ -121,6 +121,14 @@ foreach ($dir in $expandedArchive) {
 Write-Output "Storing update version..."
 Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
 
+# ============================== CREATE EVENT LOG =============================
+# Creates custom event log for RMM monitoring and maintenance scripts. This is
+# the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
+# THEN NO RMM MONITORS WILL WORK!
+Write-Output "Creating or updating custom event log..."
+New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
+Get-WinEvent -ListLog MITKY
+
 # ======================== CREATE ENVIRONMENT VARIABLES =======================
 # Set or update environment variables such as Datto site variables or UDFs.
 # DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
@@ -133,18 +141,11 @@ function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
         [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
     }
 }
-
+# Set these variables from Datto site variables
 Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
 Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
 # =========================== CREATE SCHEDULED TASKS ==========================
-# Creates custom event log for RMM monitoring and maintenance scripts. This is
-# the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
-# THEN NO RMM MONITORS WILL WORK!
-Write-Output "Creating or updating custom event log..."
-New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
-Get-WinEvent -ListLog MITKY
-
 # DISABLE scheduled tasks with name starting with "MITKY*"
 Write-Output "Disabling previous tasks..."
 $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
@@ -160,7 +161,6 @@ foreach ($script in $setupScripts) {
     $scriptPath = $script.FullName
     & $scriptPath
 }
-
 
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files
