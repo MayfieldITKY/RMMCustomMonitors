@@ -137,7 +137,6 @@ function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
 Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
 Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
-
 # =========================== CREATE SCHEDULED TASKS ==========================
 # Creates custom event log for RMM monitoring and maintenance scripts. This is
 # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
