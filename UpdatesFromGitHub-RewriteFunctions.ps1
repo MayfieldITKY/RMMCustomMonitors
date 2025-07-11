@@ -47,24 +47,41 @@ Deploying branch: $updateRepo
 
 "@ -NoTimestamp
 
-# =========================== CREATE MITKY EVENT LOG ==========================
+# ============================== CREATE EVENT LOG =============================
     # Creates custom event log for RMM monitoring and maintenance scripts. This is
     # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
     # THEN NO RMM MONITORS WILL WORK!
     Write-UpdateLogAndOutput "Creating or updating custom event log..."
-    $eventSources = @(
-        "Scheduled Tasks",
-        "Maintenance Tasks",
-        "RMM"
-    )
-    foreach ($source in $eventSources) {
-        New-EventLog -Source $source -LogName "MITKY" -ErrorAction Ignore
-    }
-    if (Get-EventLog -List | Where-Object {$_.Log -like "MITKY"}) {
-        Write-UpdateLogAndOutput "Event log MITKY updated successfully!"
-    } else {
-        Write-UpdateLogAndOutput "Event log MITKY not found! RMM monitoring will not work without this log!"
-    }
+    New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
+    Get-WinEvent -ListLog MITKY
+
+    # Create custom view
+    $customViewFilterXml = @"
+<ViewerConfig>
+    <QueryConfig>
+        <QueryParams>
+            <Simple>
+                <Channel>MITKY</Channel>
+                <RelativeTimeInfo>0</RelativeTimeInfo>
+                <BySource>False</BySource>
+            </Simple>
+        </QueryParams>
+        <QueryNode>
+            <Name>MITKY</Name>
+            <Description>Mayfield IT custom events</Description>
+            <QueryList>
+                <Query Id="0">
+                    <Select Path="MITKY">*</Select>
+                </Query>
+            </QueryList>
+        </QueryNode>
+    </QueryConfig>
+</ViewerConfig>
+"@
+
+    $customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
+    if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
+    New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
 
 # ================== DOWNLOAD REPOSITORY FILE TO TEMP FOLDER ==================
     # If the temp path already exists (it should not because it contains the current
@@ -155,10 +172,27 @@ Deploying branch: $updateRepo
     $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
     foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
 
+    # Get a list of scripts in the RunFirst folder and run them in the correct order
+    Write-UpdateLogAndOutput "Running priority setup scripts..."
+    $runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
+    $runFirstList = Get-Content -Path "$runFirstPath\runFirstList.txt"
+    foreach ($line in $runFirstList) {
+        if ($line -notlike "#*") {
+            if (($line -like "*.ps1") -or ($line -like "*.bat") -or ($line -like "*.reg")) {
+                if (-Not (Test-Path "$runFirstPath\$line" -ErrorAction Ignore)) {continue}
+                else {
+                    Write-UpdateLogAndOutput "Running $line..."
+                    $scriptPath = "$runFirstPath\$line"
+                    & $scriptPath
+                }
+            }
+        }
+    }
+
     # Get list of setup scripts and run each script. Scripts should check for
     # existing tasks and delete them before creating
     Write-UpdateLogAndOutput "Running setup scripts for scheduled tasks..."
-    $setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1
+    $setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1 | Where-Object {$_.FullName -notlike "*RunFirst*"}
 
     foreach ($script in $setupScripts) {
         Write-UpdateLogAndOutput "Running $script..."
