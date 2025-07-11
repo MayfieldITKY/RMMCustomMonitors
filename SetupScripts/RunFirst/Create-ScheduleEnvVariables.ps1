@@ -33,7 +33,7 @@ function Get-CurrentTask([string]$taskName) {
 }
 
 function Get-CurrentTaskStartTime([string]$taskName) {
-    $triggerStart = Get-ScheduledTask -TaskName $taskName | 
+    $triggerStart = Get-ScheduledTask -TaskName $taskName -ErrorAction Ignore | 
         Select-Object -ExpandProperty Triggers | 
         Select-Object -ExpandProperty StartBoundary
     if ($triggerStart.count -ne 1) {return $false}

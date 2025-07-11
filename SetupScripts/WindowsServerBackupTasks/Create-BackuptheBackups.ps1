@@ -9,8 +9,8 @@ Get-ScheduledTask | Where-Object {$_.TaskName -like $oldTaskName} | Disable-Sche
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-BackuptheBackups.ps1"
 $newTaskName = "MITKY - Backup the Backups"
 $newTaskDescription = @"
-Renames backup revisions with date and rotates revisions if needed.
-Failed backups will also be removed.
+Renames backup revisions with date and rotates revisions if needed. 
+Failed backups will also be removed. 
 This runs before any scheduled backup. If backups do not run on weekends, 
 this should also run after Friday's backup.
 "@

@@ -49,7 +49,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
 Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
 Register-ScheduledTask @newTaskParams
 $newTask = Get-ScheduledTask -TaskName $newTaskName
-if ($newTask.State -eq "Ready") {Remove-WBPolicy -All -Force}
+if ($newTask.State -eq "Ready") {Remove-WBPolicy -All -Force -ErrorAction Ignore}
 
 
 # Checks that the task was created successfully and is active, and write the 
