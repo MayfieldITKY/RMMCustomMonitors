@@ -129,6 +129,34 @@ Write-Output "Creating or updating custom event log..."
 New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
 Get-WinEvent -ListLog MITKY
 
+# Create custom view
+$customViewFilterXml = @"
+<ViewerConfig>
+    <QueryConfig>
+        <QueryParams>
+            <Simple>
+                <Channel>MITKY</Channel>
+                <RelativeTimeInfo>0</RelativeTimeInfo>
+                <BySource>False</BySource>
+            </Simple>
+        </QueryParams>
+        <QueryNode>
+            <Name>MITKY</Name>
+            <Description>Mayfield IT custom events</Description>
+            <QueryList>
+                <Query Id="0">
+                    <Select Path="MITKY">*</Select>
+                </Query>
+            </QueryList>
+        </QueryNode>
+    </QueryConfig>
+</ViewerConfig>
+"@
+
+$customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
+if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
+New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
+
 # ======================== CREATE ENVIRONMENT VARIABLES =======================
 # Set or update environment variables such as Datto site variables or UDFs.
 # DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
