@@ -28,10 +28,6 @@ $updateTempPath = "C:\Scripts\Temp\$updateDate-RMMCustomMonitors"
 $updateFileName = "RMMCustomMonitors.zip"
 $updateFilePath = "$updateTempPath\$updateFileName"
 $scriptsDestination = "C:\Scripts\RMMCustomMonitors"
-$updateRepo = "test"
-if ($env:updateRepository) {$updateRepo = $env:updateRepository}
-$updateRepoFileName = "$updateRepo.zip"
-
 
 # =============================== MAIN FUNCTION ===============================
 function main {
@@ -43,7 +39,7 @@ function main {
 ====================== Updated 07/14/2025 by Jason Farris =====================
 
 Deployment run on: $runDate
-Deploying branch: $updateRepo
+Deployment files were attached to Datto component. Use the GitHub version if possible!
 
 "@ -NoTimestamp
 
@@ -97,25 +93,11 @@ Deploying branch: $updateRepo
         Start-Sleep 10
     }
 
-    # Set TLS version and get file
-    Write-UpdateLogAndOutput "Downloading current repository..."
-    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
-    Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
+    # Copy package from Datto to temp path
+    Write-Output "Getting current files from Datto..."
+    $updatePackage = ".\RMMCustomMonitors.zip"
+    Copy-Item -Path $updatePackage -Destination $updateFilePath
     Start-Sleep 10
-    # Wait a while to download for slow connections
-    # ($waitTries + 1) * 10 = total wait time in seconds
-    $waitTries = 5
-    $tries = 0
-    while ($tries++ -lt $waitTries) {
-        If (Test-Path $updateFilePath) {break}
-        Write-UpdateLogAndOutput "Waiting for file download..."
-        Start-Sleep 10
-    }
-
-    If (-Not (Test-Path $updateFilePath)) {
-        Write-UpdateLogAndOutput "Could not download repository! Check that the branch named $updateRepo is correct and is uploaded."
-        return "noDownload"
-    }
 
     # Compare the downloaded file to the last update file. If they are the same, no update is needed
     Write-UpdateLogAndOutput "Checking if update is needed..."
