@@ -6,7 +6,7 @@
 # TASK VARIABLES
 $taskName = "MITKY - Schedule Windows Server Backup"
 $newTaskName = "MITKY - Start Windows Server Backup"
-$backupStartTime = $env:backup_start_time
+$backupStartTime = [System.Environment]::GetEnvironmentVariable("backup_start_time", "Machine")
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
 $weekendBackup = $false
 
@@ -48,7 +48,7 @@ $newTaskParams = @{
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
 Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
 Register-ScheduledTask @newTaskParams
-$newTask = Get-ScheduledTask -TaskName $newTaskName
+$newTask = Get-ScheduledTask -TaskName $newTaskName -ErrorAction Ignore
 if ($newTask.State -eq "Ready") {Remove-WBPolicy -All -Force -ErrorAction Ignore}
 
 

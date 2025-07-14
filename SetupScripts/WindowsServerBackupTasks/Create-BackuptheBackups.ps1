@@ -21,7 +21,7 @@ $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
-$startTime = $env:backup_the_backups_time
+$startTime = [System.Environment]::GetEnvironmentVariable("backup_the_backups_time", "Machine")
 $taskTriggers = @()
 
 $weekendBackup = $false
@@ -54,7 +54,7 @@ Register-ScheduledTask @newTaskParams
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
-$newTask = Get-ScheduledTask -TaskName $newTaskName
+$newTask = Get-ScheduledTask -TaskName $newTaskName -ErrorAction Ignore
 
 if ($newTask.State -eq "Ready") {
   $params = @{
