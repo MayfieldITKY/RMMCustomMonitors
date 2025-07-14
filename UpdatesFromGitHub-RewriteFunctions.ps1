@@ -330,8 +330,10 @@ $resultMessage
 
 FULL REPORT FROM LOG FILE: $updateLogFullName
 
-$updateLogReport
-
 "@
 
+foreach ($line in $updateLogReport) {
+    Write-Output $line
+    $reportParams.Message += "$line `n"
+} 
 Write-EventLog @reportParams
