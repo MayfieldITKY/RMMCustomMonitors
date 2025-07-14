@@ -50,8 +50,7 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
 Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
 Register-ScheduledTask @newTaskParams
 $newTask = Get-ScheduledTask -TaskName $newTaskName -ErrorAction Ignore
-if ($newTask.State -eq "Ready") {Remove-WBPolicy -All -Force -ErrorAction Ignore}
-
+if ($newTask.State -eq "Ready") {if (Get-WBPolicy) {Remove-WBPolicy -All -Force -ErrorAction Ignore}}
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
