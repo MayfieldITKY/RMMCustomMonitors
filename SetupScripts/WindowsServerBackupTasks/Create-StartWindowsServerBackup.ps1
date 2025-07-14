@@ -7,13 +7,14 @@
 $taskName = "MITKY - Schedule Windows Server Backup"
 $newTaskName = "MITKY - Start Windows Server Backup"
 $backupStartTime = [System.Environment]::GetEnvironmentVariable("backup_start_time", "Machine")
+if (-Not ($backupStartTime)) {$backupStartTime = "20:20"}
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
 $weekendBackup = $false
 
 # If weekend backups are not needed, schedule backups for Monday-Friday only. If
 # the schedule needs to be changed, it can be changed manually in the scheduled
 # task. If this script is updated and run again, it should keep the new time.
-if ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+if ($([System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")) -eq "TRUE") {$weekendBackup = $true}
 $taskTrigger = ""
 If ($weekendBackup) {$taskTrigger = New-ScheduledTaskTrigger -Daily -At $backupStartTime} 
 Else {$taskTrigger = New-ScheduledTaskTrigger -Weekly -At $backupStartTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday} 

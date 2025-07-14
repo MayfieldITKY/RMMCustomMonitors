@@ -10,8 +10,8 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Ignore
 # SPECIFY THESE VARIABLES
 $pathToScript = "C:\Scripts\RMMCustomMonitors\HostServerScripts\HOST-CheckHyperVCheckpoints.ps1"
 $newTaskName = "MITKY - Check Hyper-V Checkpoints"
-$taskTriggerTime = "08:00"
-if ($env:get_checkpoints_time) {$taskTriggerTime = $env:get_checkpoints_time} 
+$taskTriggerTime = $([System.Environment]::GetEnvironmentVariable("get_checkpoints_time", "Machine"))
+if (-Not ($taskTriggerTime)) {$taskTriggerTime = "08:00"}
 $taskTrigger = New-ScheduledTaskTrigger -At $taskTriggerTime -Daily
 
 # DO NOT CHANGE THESE VARIABLES

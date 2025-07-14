@@ -22,10 +22,11 @@ $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
 $startTime = [System.Environment]::GetEnvironmentVariable("backup_the_backups_time", "Machine")
+if (-Not ($startTime)) {$startTime = "20:00"}
 $taskTriggers = @()
 
 $weekendBackup = $false
-if ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
+if ($([System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")) -eq "TRUE") {$weekendBackup = $true}
 If ($weekendBackup) {
     $taskTrigger = New-ScheduledTaskTrigger -Daily -At $startTime
     $taskTriggers += $taskTrigger
