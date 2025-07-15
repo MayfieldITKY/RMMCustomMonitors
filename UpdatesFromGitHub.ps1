@@ -1,7 +1,7 @@
 ﻿Write-Output @"
 ================== Deploy Custom Server Monitors from GitHub ==================
 ============================ Mayfield IT Consulting ===========================
-====================== Updated 04/15/2025 by Jason Farris =====================
+====================== Updated 07/09/2025 by Jason Farris =====================
 
 "@
 
@@ -121,6 +121,42 @@ foreach ($dir in $expandedArchive) {
 Write-Output "Storing update version..."
 Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
 
+# ============================== CREATE EVENT LOG =============================
+# Creates custom event log for RMM monitoring and maintenance scripts. This is
+# the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
+# THEN NO RMM MONITORS WILL WORK!
+Write-Output "Creating or updating custom event log..."
+New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
+Get-WinEvent -ListLog MITKY
+
+# Create custom view
+$customViewFilterXml = @"
+<ViewerConfig>
+    <QueryConfig>
+        <QueryParams>
+            <Simple>
+                <Channel>MITKY</Channel>
+                <RelativeTimeInfo>0</RelativeTimeInfo>
+                <BySource>False</BySource>
+            </Simple>
+        </QueryParams>
+        <QueryNode>
+            <Name>MITKY</Name>
+            <Description>Mayfield IT custom events</Description>
+            <QueryList>
+                <Query Id="0">
+                    <Select Path="MITKY">*</Select>
+                </Query>
+            </QueryList>
+        </QueryNode>
+    </QueryConfig>
+</ViewerConfig>
+"@
+
+$customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
+if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
+New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
+
 # ======================== CREATE ENVIRONMENT VARIABLES =======================
 # Set or update environment variables such as Datto site variables or UDFs.
 # DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
@@ -133,35 +169,42 @@ function Set-CustomSystemVariable([string]$eVarName, [string]$eVarValue) {
         [System.Environment]::SetEnvironmentVariable($eVarName,$eVarValue,[System.EnvironmentVariableTarget]::Machine)
     }
 }
-
+# Set these variables from Datto site variables
 Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
 Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
-
 # =========================== CREATE SCHEDULED TASKS ==========================
-# Creates custom event log for RMM monitoring and maintenance scripts. This is
-# the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
-# THEN NO RMM MONITORS WILL WORK!
-Write-Output "Creating or updating custom event log..."
-New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
-Get-WinEvent -ListLog MITKY
-
 # DISABLE scheduled tasks with name starting with "MITKY*"
 Write-Output "Disabling previous tasks..."
 $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
 foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
 
+# Get a list of scripts in the RunFirst folder and run them in the correct order
+$runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
+$runFirstList = Get-Content -Path "$runFirstPath\runFirstList.txt"
+foreach ($line in $runFirstList) {
+    if ($line -notlike "#*") {
+        if (($line -like "*.ps1") -or ($line -like "*.bat") -or ($line -like "*.reg")) {
+            if (-Not (Test-Path "$runFirstPath\$line" -ErrorAction Ignore)) {continue}
+            else {
+                Write-Output "Running $line..."
+                $scriptPath = "$runFirstPath\$line"
+                & $scriptPath
+            }
+        }
+    }
+}
+
 # Get list of setup scripts and run each script. Scripts should check for
 # existing tasks and delete them before creating
 Write-Output "Running setup scripts for scheduled tasks..."
-$setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1
+$setupScripts = Get-ChildItem -Path "$scriptsDestination\SetupScripts\*" -Recurse -Include *.ps1 | Where-Object {$_.FullName -notlike "*RunFirst*"}
 
 foreach ($script in $setupScripts) {
     Write-Output "Running $script..."
     $scriptPath = $script.FullName
     & $scriptPath
 }
-
 
 # ============================= CLEANUP AND REPORT ============================
 # Delete temporary files

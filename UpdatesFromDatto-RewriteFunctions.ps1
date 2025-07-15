@@ -28,10 +28,6 @@ $updateTempPath = "C:\Scripts\Temp\$updateDate-RMMCustomMonitors"
 $updateFileName = "RMMCustomMonitors.zip"
 $updateFilePath = "$updateTempPath\$updateFileName"
 $scriptsDestination = "C:\Scripts\RMMCustomMonitors"
-if ($env:updateRepository) {$updateRepo = $env:updateRepository}
-else {$updateRepo = "test"}
-$updateRepoFileName = "$updateRepo.zip"
-
 
 # =============================== MAIN FUNCTION ===============================
 function main {
@@ -43,14 +39,49 @@ function main {
 ====================== Updated 07/14/2025 by Jason Farris =====================
 
 Deployment run on: $runDate
-Deploying branch: $updateRepo
+Deployment files were attached to Datto component. Use the GitHub version if possible!
 
 "@ -NoTimestamp
+
+# ============================== CREATE EVENT LOG =============================
+    # Creates custom event log for RMM monitoring and maintenance scripts. This is
+    # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
+    # THEN NO RMM MONITORS WILL WORK!
+    Write-UpdateLogAndOutput "Creating or updating custom event log..."
+    New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
+    Get-WinEvent -ListLog MITKY
+
+    # Create custom view
+    $customViewFilterXml = @"
+<ViewerConfig>
+    <QueryConfig>
+        <QueryParams>
+            <Simple>
+                <Channel>MITKY</Channel>
+                <RelativeTimeInfo>0</RelativeTimeInfo>
+                <BySource>False</BySource>
+            </Simple>
+        </QueryParams>
+        <QueryNode>
+            <Name>MITKY</Name>
+            <Description>Mayfield IT custom events</Description>
+            <QueryList>
+                <Query Id="0">
+                    <Select Path="MITKY">*</Select>
+                </Query>
+            </QueryList>
+        </QueryNode>
+    </QueryConfig>
+</ViewerConfig>
+"@
+
+    $customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
+    if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
+    New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
 
 # ================== DOWNLOAD REPOSITORY FILE TO TEMP FOLDER ==================
     # If the temp path already exists (it should not because it contains the current
     # date!), delete it. Create the temp path
-    Write-UpdateLogAndOutput ""
     If (Test-Path $updateTempPath) {
         Write-UpdateLogAndOutput "Removing previous temp folder..."
         Remove-Item $updateTempPath -Recurse -Force
@@ -62,25 +93,11 @@ Deploying branch: $updateRepo
         Start-Sleep 10
     }
 
-    # Set TLS version and get file
-    Write-UpdateLogAndOutput "Downloading current repository..."
-    [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
-    Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
+    # Copy package from Datto to temp path
+    Write-Output "Getting current files from Datto..."
+    $updatePackage = ".\RMMCustomMonitors.zip"
+    Copy-Item -Path $updatePackage -Destination $updateFilePath
     Start-Sleep 10
-    # Wait a while to download for slow connections
-    # ($waitTries + 1) * 10 = total wait time in seconds
-    $waitTries = 5
-    $tries = 0
-    while ($tries++ -lt $waitTries) {
-        If (Test-Path $updateFilePath) {break}
-        Write-UpdateLogAndOutput "Waiting for file download..."
-        Start-Sleep 10
-    }
-
-    If (-Not (Test-Path $updateFilePath)) {
-        Write-UpdateLogAndOutput "Could not download repository! Check that the branch named $updateRepo is correct and is uploaded."
-        return "noDownload"
-    }
 
     # Compare the downloaded file to the last update file. If they are the same, no update is needed
     Write-UpdateLogAndOutput "Checking if update is needed..."
@@ -100,7 +117,6 @@ Deploying branch: $updateRepo
     }
 
 # =============== EXTRACT DOWNLOAD AND COPY TO TARGET DIRECTORY ===============
-    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Extracting files..."
     Expand-UpdatePackage $updateFilePath $updateTempPath
     Start-Sleep 10
@@ -132,36 +148,15 @@ Deploying branch: $updateRepo
     Write-UpdateLogAndOutput "Storing update version..."
     Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
 
-# ============================== CREATE EVENT LOG =============================
-    # Creates custom event log for RMM monitoring and maintenance scripts. This is
-    # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
-    # THEN NO RMM MONITORS WILL WORK!
-    Write-UpdateLogAndOutput ""
-    Write-UpdateLogAndOutput "Creating custom event log and view..."
-    $runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
-    $eventLogScript = "$runFirstPath\Create-CustomEventLogandView.ps1"
-    if (Test-Path $eventLogScript) {& $eventLogScript}
-
-# ======================== CREATE ENVIRONMENT VARIABLES =======================
-    # Set or update environment variables such as Datto site variables or UDFs.
-    # DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
-    # CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
-    # is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
-    # These should NEVER contain secrets!
-    Write-UpdateLogAndOutput ""
-    Write-UpdateLogAndOutput "Creating system variables..."
-    Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
-    Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
-
 # =========================== CREATE SCHEDULED TASKS ==========================
     # DISABLE scheduled tasks with name starting with "MITKY*"
-    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Disabling previous tasks..."
     $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
     foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
 
     # Get a list of scripts in the RunFirst folder and run them in the correct order
     Write-UpdateLogAndOutput "Running priority setup scripts..."
+    $runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
     $runFirstList = Get-Content -Path "$runFirstPath\runFirstList.txt"
     foreach ($line in $runFirstList) {
         if ($line -notlike "#*") {
@@ -187,9 +182,17 @@ Deploying branch: $updateRepo
         & $scriptPath
     }
 
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+# Set or update environment variables such as Datto site variables or UDFs.
+# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
+# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
+# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
+# These should NEVER contain secrets!
+    Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
+    Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+
 # ============================= CLEANUP TEMP FILES ============================
     # Delete temporary files
-    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Update completed! Cleaning up temporary files and reporting results..."
     Remove-Item $updateTempPath -Recurse -Force
     return "updateFinished"
@@ -228,8 +231,9 @@ function Write-UpdateLogAndOutput {
     if (-Not ($message)) {
         Write-Output " "
         Add-Content -Path $updateLogFullName " "
+        return
     }
-    elseif ($NoTimestamp) {
+    if ($NoTimestamp) {
         Write-Output $message
         Add-Content -Path $updateLogFullName $message
     } else {
@@ -245,6 +249,7 @@ function Expand-UpdatePackage {
     param([string]$zipfile, [string]$outpath)
     if (-Not (Test-Path $zipfile)) {
         Write-UpdateLogAndOutput "The target package file does not exist!"
+        return
     } else {[System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)}
 }
 

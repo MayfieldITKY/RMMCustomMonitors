@@ -1,0 +1,7 @@
+# Priority setup scripts for RMM monitors
+# List scripts in SetupScripts\RunFirst in the order they should be run.
+# If a script in this FOLDER is not on the LIST, it will not be run at all!
+# Include one script name per line, and include the file extension. Scripts can
+# be .ps1, .bat, or .reg files.
+
+Create-ScheduleEnvVariables.ps1

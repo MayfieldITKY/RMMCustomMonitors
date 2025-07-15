@@ -5,28 +5,16 @@
 
 # TASK VARIABLES
 $taskName = "MITKY - Schedule Windows Server Backup"
-$newTaskName = $taskName # "MITKY - Schedule Windows Server Backup"
-$backupStartTime = "20:00"
+$newTaskName = "MITKY - Start Windows Server Backup"
+$backupStartTime = [System.Environment]::GetEnvironmentVariable("backup_start_time", "Machine")
+if (-Not ($backupStartTime)) {$backupStartTime = "20:20"}
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-StartWindowsServerBackup.ps1"
-
-# GET SCHEDULE INFORMATION
-# First check if Windows Server Backup is scheduled from the management console
-# and if this server should run backups on the weekend. If so, we still make the task. 
-$scheduledBackup = $false
 $weekendBackup = $false
-If ((Get-WBSummary).NextBackupTime) {$scheduledBackup = $true}
-If ($env:weekend_backup -eq "TRUE") {$weekendBackup = $true}
-
-# If there is a policy but weekend backups are not needed, use the policy's start
-# time. If there is no policy, use the time from the current scheduled task. If
-# there is no task, use the default time set above.
-If ($scheduledBackup) {$backupStartTime = Get-Date $((Get-WBSummary).LastBackupTime) -Format "HH:mm"}
-Elseif (Get-ScheduledTask $taskName) {$backupStartTime = Get-Date $((Get-ScheduledTask "$taskName").Triggers.StartBoundary) -Format "HH:mm"}
-#If (Get-ScheduledTask "TestTask") {$backupStartTime = Get-Date $((Get-ScheduledTask "TestTask").Triggers.StartBoundary) -Format "HH:mm"}
 
 # If weekend backups are not needed, schedule backups for Monday-Friday only. If
 # the schedule needs to be changed, it can be changed manually in the scheduled
 # task. If this script is updated and run again, it should keep the new time.
+if ($([System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")) -eq "TRUE") {$weekendBackup = $true}
 $taskTrigger = ""
 If ($weekendBackup) {$taskTrigger = New-ScheduledTaskTrigger -Daily -At $backupStartTime} 
 Else {$taskTrigger = New-ScheduledTaskTrigger -Weekly -At $backupStartTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday} 
@@ -36,7 +24,6 @@ Else {$taskTrigger = New-ScheduledTaskTrigger -Weekly -At $backupStartTime -Days
 $descriptionWeekend = 'WEEKDAYS ONLY'
 If ($weekendBackup) {$descriptionWeekend = 'EVERY DAY'}
 $descriptionTime = Get-Date $backupStartTime -Format "h:mm tt"
-
 $newTaskDescription = "Starts Windows Server Backup: $descriptionWeekend at $descriptionTime"
 
 # DO NOT CHANGE THESE VARIABLES
@@ -60,10 +47,10 @@ $newTaskParams = @{
 # task schedule or other parameters have changed since the last update.
 # Remove Windows Server Backup schedule if the task creates successfully.
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Ignore
+Unregister-ScheduledTask -TaskName $newTaskName -Confirm:$false -ErrorAction Ignore
 Register-ScheduledTask @newTaskParams
-$newTask = Get-ScheduledTask -TaskName $newTaskName
-if ($newTask.State -eq "Ready") {Remove-WBPolicy -All -Force}
-
+$newTask = Get-ScheduledTask -TaskName $newTaskName -ErrorAction Ignore
+if ($newTask.State -eq "Ready") {if (Get-WBPolicy) {Remove-WBPolicy -All -Force -ErrorAction Ignore}}
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.

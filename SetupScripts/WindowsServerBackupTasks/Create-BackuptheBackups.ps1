@@ -9,16 +9,11 @@ Get-ScheduledTask | Where-Object {$_.TaskName -like $oldTaskName} | Disable-Sche
 $pathToScript = "C:\Scripts\RMMCustomMonitors\WindowsServerBackupScripts\WSB-BackuptheBackups.ps1"
 $newTaskName = "MITKY - Backup the Backups"
 $newTaskDescription = @"
-Renames backup revisions with date and rotates revisions if needed.
-This only runs after a successful Windows Server Backup.
+Renames backup revisions with date and rotates revisions if needed. 
+Failed backups will also be removed. 
+This runs before any scheduled backup. If backups do not run on weekends, 
+this should also run after Friday's backup.
 "@
-# Create a test task with the correct trigger and export it, then find the <Subscription> tag under <Triggers>
-$triggerSubscription = @"
-<QueryList><Query Id="0" Path="Microsoft-Windows-Backup">
-<Select Path="Microsoft-Windows-Backup">*[System[Provider[@Name='Microsoft-Windows-Backup'] and EventID=4]]
-</Select></Query></QueryList>
-"@
-$triggerDelay = "PT30M" # 30 minutes after trigger event
 
 # =============================================================================
 # DO NOT CHANGE BELOW THIS LINE
@@ -26,13 +21,23 @@ $arguments = "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File $
 $User = "NT AUTHORITY\SYSTEM"
 $Action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument $arguments
 $taskPath = "MayfieldIT"
+$startTime = [System.Environment]::GetEnvironmentVariable("backup_the_backups_time", "Machine")
+if (-Not ($startTime)) {$startTime = "20:00"}
+$taskTriggers = @()
 
-# Task trigger on event ID
-$triggerClass = Get-cimclass MSFT_TaskEventTrigger root/Microsoft/Windows/TaskScheduler
-$taskTrigger = $triggerClass | New-CimInstance -ClientOnly
-$taskTrigger.Enabled = $true
-$taskTrigger.Subscription = $triggerSubscription
-$taskTrigger.Delay = $triggerDelay
+$weekendBackup = $false
+if ($([System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")) -eq "TRUE") {$weekendBackup = $true}
+If ($weekendBackup) {
+    $taskTrigger = New-ScheduledTaskTrigger -Daily -At $startTime
+    $taskTriggers += $taskTrigger
+} 
+Else {
+    $taskTrigger1 = New-ScheduledTaskTrigger -Weekly -At $startTime -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday
+    $saturdayTime = Get-Date $((Get-Date $startTime).AddHours(12)) -Format "HH:mm"
+    $taskTrigger2 = New-ScheduledTaskTrigger -Weekly -At $saturdayTime -DaysOfWeek Saturday
+    $taskTriggers += $taskTrigger1, $taskTrigger2
+}
+
 
 $newTaskParams = @{
   TaskName = $newTaskName
@@ -41,7 +46,7 @@ $newTaskParams = @{
   Action = $Action
   User = $User
   RunLevel = "Highest"
-  Trigger = $taskTrigger
+  Trigger = $taskTriggers
 }
 
 # DELETE EXISTING TASK AND CREATE NEW TASK
@@ -50,7 +55,7 @@ Register-ScheduledTask @newTaskParams
 
 # Checks that the task was created successfully and is active, and write the 
 # result to the event log. An error should trigger an alert from an RMM monitor.
-$newTask = Get-ScheduledTask -TaskName $newTaskName
+$newTask = Get-ScheduledTask -TaskName $newTaskName -ErrorAction Ignore
 
 if ($newTask.State -eq "Ready") {
   $params = @{
