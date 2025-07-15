@@ -142,6 +142,17 @@ Deploying branch: $updateRepo
     $eventLogScript = "$runFirstPath\Create-CustomEventLogandView.ps1"
     if (Test-Path $eventLogScript) {& $eventLogScript}
 
+# ======================== CREATE ENVIRONMENT VARIABLES =======================
+    # Set or update environment variables such as Datto site variables or UDFs.
+    # DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
+    # CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
+    # is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
+    # These should NEVER contain secrets!
+    Write-UpdateLogAndOutput ""
+    Write-UpdateLogAndOutput "Creating system variables..."
+    Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
+    Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
+
 # =========================== CREATE SCHEDULED TASKS ==========================
     # DISABLE scheduled tasks with name starting with "MITKY*"
     Write-UpdateLogAndOutput ""
@@ -175,17 +186,6 @@ Deploying branch: $updateRepo
         $scriptPath = $script.FullName
         & $scriptPath
     }
-
-# ======================== CREATE ENVIRONMENT VARIABLES =======================
-# Set or update environment variables such as Datto site variables or UDFs.
-# DO NOT CREATE VARIABLES WITH NAMES IDENTICAL TO DATTO VARIABLES - INCLUDING
-# CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
-# is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
-# These should NEVER contain secrets!
-    Write-UpdateLogAndOutput ""
-    Write-UpdateLogAndOutput "Creating system variables..."
-    Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
-    Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
 # ============================= CLEANUP TEMP FILES ============================
     # Delete temporary files
