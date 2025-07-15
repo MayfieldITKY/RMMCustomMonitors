@@ -28,8 +28,8 @@ $updateTempPath = "C:\Scripts\Temp\$updateDate-RMMCustomMonitors"
 $updateFileName = "RMMCustomMonitors.zip"
 $updateFilePath = "$updateTempPath\$updateFileName"
 $scriptsDestination = "C:\Scripts\RMMCustomMonitors"
-$updateRepo = "test"
 if ($env:updateRepository) {$updateRepo = $env:updateRepository}
+else {$updateRepo = "test"}
 $updateRepoFileName = "$updateRepo.zip"
 
 
