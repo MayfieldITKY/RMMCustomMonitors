@@ -13,6 +13,7 @@ $isWeekend = $false
 # variation in backup times)
 $successEvent = Get-WinEvent -LogName "Microsoft-Windows-Backup" | 
 Where-Object {($_.Id -like "4") -and ($_.TimeCreated -gt ((Get-Date).AddHours(-28)))}
+if ($successEvent) {$successFound = $true}
 
 # Check if this host should run backups on the weekends. If no variables are set,
 # assume weekend backups SHOULD run.
