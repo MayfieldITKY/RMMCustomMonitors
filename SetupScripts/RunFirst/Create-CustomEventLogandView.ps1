@@ -36,7 +36,7 @@ $customViewFilterXml = @"
 
 $customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
 if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
-New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
+New-Item -Path $customViewFilePath -ItemType "File" -Value $customViewFilterXml -Force
 
 if (Test-Path $customViewFilePath) {Write-Output "Created custom view for MITKY event log."}
 else {

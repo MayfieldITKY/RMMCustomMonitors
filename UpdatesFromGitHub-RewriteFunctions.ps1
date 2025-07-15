@@ -47,45 +47,10 @@ Deploying branch: $updateRepo
 
 "@ -NoTimestamp
 
-# ============================== CREATE EVENT LOG =============================
-    # Creates custom event log for RMM monitoring and maintenance scripts. This is
-    # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
-    # THEN NO RMM MONITORS WILL WORK!
-    Write-UpdateLogAndOutput "Creating or updating custom event log..."
-    New-EventLog -LogName MITKY -Source 'Scheduled Tasks', 'Maintenance Tasks', 'RMM' -ErrorAction Ignore
-    Get-WinEvent -ListLog MITKY
-
-    # Create custom view
-    $customViewFilterXml = @"
-<ViewerConfig>
-    <QueryConfig>
-        <QueryParams>
-            <Simple>
-                <Channel>MITKY</Channel>
-                <RelativeTimeInfo>0</RelativeTimeInfo>
-                <BySource>False</BySource>
-            </Simple>
-        </QueryParams>
-        <QueryNode>
-            <Name>MITKY</Name>
-            <Description>Mayfield IT custom events</Description>
-            <QueryList>
-                <Query Id="0">
-                    <Select Path="MITKY">*</Select>
-                </Query>
-            </QueryList>
-        </QueryNode>
-    </QueryConfig>
-</ViewerConfig>
-"@
-
-    $customViewFilePath = "C:\ProgramData\Microsoft\Event Viewer\Views\MITKY.xml"
-    if (Test-Path $customViewFilePath) {Remove-Item -Path $customViewFilePath -Force}
-    New-Item -Path $customViewFilePath -Force -Value $customViewFilterXml
-
 # ================== DOWNLOAD REPOSITORY FILE TO TEMP FOLDER ==================
     # If the temp path already exists (it should not because it contains the current
     # date!), delete it. Create the temp path
+    Write-UpdateLogAndOutput ""
     If (Test-Path $updateTempPath) {
         Write-UpdateLogAndOutput "Removing previous temp folder..."
         Remove-Item $updateTempPath -Recurse -Force
@@ -135,6 +100,7 @@ Deploying branch: $updateRepo
     }
 
 # =============== EXTRACT DOWNLOAD AND COPY TO TARGET DIRECTORY ===============
+    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Extracting files..."
     Expand-UpdatePackage $updateFilePath $updateTempPath
     Start-Sleep 10
@@ -166,15 +132,25 @@ Deploying branch: $updateRepo
     Write-UpdateLogAndOutput "Storing update version..."
     Set-Content -Path "$scriptsDestination\LastUpdateHash.txt" -Value $updateHash.Hash -Force
 
+# ============================== CREATE EVENT LOG =============================
+    # Creates custom event log for RMM monitoring and maintenance scripts. This is
+    # the custom event log that the RMM monitors will check. IF THIS DOESN'T WORK 
+    # THEN NO RMM MONITORS WILL WORK!
+    Write-UpdateLogAndOutput ""
+    Write-UpdateLogAndOutput "Creating custom event log and view..."
+    $runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
+    $eventLogScript = "$runFirstPath\Create-CustomEventLogandView.ps1"
+    if (Test-Path $eventLogScript) {& $eventLogScript}
+
 # =========================== CREATE SCHEDULED TASKS ==========================
     # DISABLE scheduled tasks with name starting with "MITKY*"
+    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Disabling previous tasks..."
     $mitkyTasks = Get-ScheduledTask -TaskName "MITKY*"
     foreach ($task in $mitkyTasks) {Disable-ScheduledTask $task}
 
     # Get a list of scripts in the RunFirst folder and run them in the correct order
     Write-UpdateLogAndOutput "Running priority setup scripts..."
-    $runFirstPath = "$scriptsDestination\SetupScripts\RunFirst"
     $runFirstList = Get-Content -Path "$runFirstPath\runFirstList.txt"
     foreach ($line in $runFirstList) {
         if ($line -notlike "#*") {
@@ -206,11 +182,14 @@ Deploying branch: $updateRepo
 # CASE-INSENSITIVE MATCHES! For example: 'short_site_name' vs 'SHORT_SITE_NAME'
 # is BAD, 'short_site_name' vs 'ShortSiteName' is GOOD.
 # These should NEVER contain secrets!
+    Write-UpdateLogAndOutput ""
+    Write-UpdateLogAndOutput "Creating system variables..."
     Set-CustomSystemVariable "short_site_name" $env:ShortSiteName # Abbreviated client name from Datto variable
     Set-CustomSystemVariable "weekend_backup" $env:WeekendBackup # Weekend backups needed from Datto variable
 
 # ============================= CLEANUP TEMP FILES ============================
     # Delete temporary files
+    Write-UpdateLogAndOutput ""
     Write-UpdateLogAndOutput "Update completed! Cleaning up temporary files and reporting results..."
     Remove-Item $updateTempPath -Recurse -Force
     return "updateFinished"
