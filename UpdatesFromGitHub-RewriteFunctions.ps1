@@ -249,9 +249,8 @@ function Write-UpdateLogAndOutput {
     if (-Not ($message)) {
         Write-Output " "
         Add-Content -Path $updateLogFullName " "
-        return
     }
-    if ($NoTimestamp) {
+    elseif ($NoTimestamp) {
         Write-Output $message
         Add-Content -Path $updateLogFullName $message
     } else {
@@ -267,7 +266,6 @@ function Expand-UpdatePackage {
     param([string]$zipfile, [string]$outpath)
     if (-Not (Test-Path $zipfile)) {
         Write-UpdateLogAndOutput "The target package file does not exist!"
-        return
     } else {[System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)}
 }
 
