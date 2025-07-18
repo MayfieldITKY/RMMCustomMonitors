@@ -2,7 +2,7 @@
 # Start a Windows Server Backup job. 
 
 $policy = New-WBPolicy
-$VMs = Get-WBVirtualMachine | Where-Object {$_.VMName -notlike "*test*"}
+$VMs = Get-WBVirtualMachine | Where-Object {($_.VMName -notlike "*test*") -and ($_.VMName -notlike "*-dbu")}
 $lastBackupTarget = $(Get-WBSummary | Select-Object -Property LastBackupTarget).LastBackupTarget
 if (-not ($lastBackupTarget)) {
     $lastBackupTarget = Get-PSDrive | Where-Object {($_.Provider -like "*FileSystem") -and (($_.Description -like "*Backup*") -or ($_.Description -like "*WSB*"))}
