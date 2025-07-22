@@ -11,7 +11,7 @@ $client = $env:short_site_name # This is a Datto variable that is written to sys
 $hostname = $env:COMPUTERNAME
 $minimumNumberofRevisions = 4
 $revisionGrowthFactor = 1.15 # use this multiplier to account for potential increase in backup size
-$freeSpaceBuffer = 0.2 # prefer to keep this percentage of backup drive free
+$freeSpaceBuffer = 30 # use this amount (in GB) when calculating available space for revisions
 $oldRevisionCutoff = -30 # revisions older than this many days are considered old. Use a negative number
 $taskLogFilePath = "C:\Scripts\Logs"
 $taskLogFullName = ""
@@ -30,12 +30,9 @@ function BackupTheBackups {
     if ($wsbDestIsNetworkLocation) {$wsbDestHostname, $wsbDestFolder = Get-NetworkLocationInfo $wsbDrive}    
     $wsbLastBackup = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup"}
     if (-Not ($wsbLastBackup)) {$wsbLastBackup = Get-OldestRevision -1}
+    $lastBackupResult = Get-LastBackupSuccess
+    $lastBackupSize = Get-SpaceUsed $wsbLastBackup
     $legacyRevisions = Get-ChildItem $wsbDrive -Directory | Where-Object {$_.Name -like "WindowsImageBackup_old*"}
-    Write-LogAndOutput ""
-    Write-LogAndOutput "Checking for previous failed revisions..."
-    $failedRevisions = Get-FailedRevisions
-    if ($failedRevisions) {foreach ($rev in $failedRevisions) {Write-LogAndOutput $rev.FullName}}
-    else {Write-LogAndOutput "No previous failed revisions found."}
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking for protected revisions..."
     $protectedRevisions = Get-ProtectedRevisions
@@ -52,9 +49,10 @@ function BackupTheBackups {
     if ($nonBackupData) {foreach ($item in $nonBackupData) {Write-LogAndOutput $item.FullName}}
     else {Write-LogAndOutput "No other data found."}
     [int]$wsbDriveSpace = Get-TotalSpace
-    [int]$wsbDriveFreeSpaceBuffer = $wsbDriveSpace * $freeSpaceBuffer
     [int]$reservedSpace = Get-NonRevisionSpace
     $preferredNumberofRevisions = $minimumNumberofRevisions
+    $expectedRevisionSize = Get-RevisionSize $(Get-CurrentRevisions)
+    $expectedRevSizeSource = 'current'
 
     # DO THINGS
     # If there are no backup revisions at all, skip to checking free space.
@@ -63,7 +61,7 @@ function BackupTheBackups {
     if (-Not ($wsbLastBackup)) {}
     elseif ($wsbLastBackup.Name -eq "WindowsImageBackup") {
         function Rename-LastBackup() {
-            if (-Not (Get-LastBackupSuccess -eq $true)) {Rename-Backup $wsbLastBackup -Failed}
+            if ($lastBackupResult -notlike "*true") {Rename-Backup $wsbLastBackup -Failed}
             else {Rename-Backup $wsbLastBackup}
         }
         Rename-LastBackup
@@ -91,17 +89,6 @@ function BackupTheBackups {
         foreach ($rev in $legacyRevisions) {Rename-Backup $rev}
     }
 
-    # Check if there are more than enough revisions. If so, check if the free
-    # space after the backup will have a comfortable margin (usually 20 percent).
-    # If not, delete older extra revisions so there is enough space.
-    if ((Get-CurrentNumberofRevisions) -gt $preferredNumberofRevisions) {
-        $attempts = (Get-CurrentNumberofRevisions) - $preferredNumberofRevisions
-        while ($attempts -gt 0) {
-            Remove-ExtraRevision
-            $attempts += -1
-        }
-    }
-
     # if there are not enough revisions and not enough space for them, determine 
     # if removing other data would help
     Write-LogAndOutput ""
@@ -110,22 +97,17 @@ function BackupTheBackups {
         Write-LogAndOutput "There are fewer than $preferredNumberofRevisions revisions. Checking revision size and free space..."
         if (((Get-FreeSpace) -lt ($expectedRevisionSize * $revisionGrowthFactor)) -and ($reservedSpace -gt 0)) {
             Write-LogAndOutput "There is not enough free space for another revision. Checking for non-backup data..."
-            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace
+            [int]$potentialSpace = (Get-FreeSpace) + $reservedSpace - $freeSpaceBuffer
             if ($potentialSpace -gt ($expectedRevisionSize * $revisionGrowthFactor)) {Write-ReportEvents 'excessiveNonBackupData'}
         }
     }
 
-    # If there is not space for another revision, try deleting any failed
-    # revisions first. If space is still needed, then try to delete the oldest
-    # current revision and update free space. Repeat until there is enough
-    # space or only the last backup remains.
+    # if there is not space for another revision, delete the oldest current
+    # revision and update free space. Repeat until there is enough space
+    # or only the last backup remains
     Write-LogAndOutput ""
     Write-LogAndOutput "Checking if there is enough free space for the next backup..."
-
-
-
-
-    $targetFreeSpace = $expectedRevisionSize * $revisionGrowthFactor
+    $targetFreeSpace = ($expectedRevisionSize * $revisionGrowthFactor) + $freeSpaceBuffer
     while ((Get-FreeSpace) -lt ($expectedRevisionSize * $revisionGrowthFactor)) {
         Write-LogAndOutput "Not enough free space for next backup. Need $targetFreeSpace GB free."
         if ($(Get-OldestRevision 1).Name -eq $(Get-OldestRevision -1).Name) {
@@ -287,15 +269,6 @@ function Rename-Backup {
     }
 }
 
-# Check for failed backup revisions
-function Get-FailedRevisions {
-    $result = @()
-    foreach ($bup in Get-AllBackups) {
-        if ($bup.Name -like "*failed*") {$result += $bup}
-    }
-    return $result
-}
-
 # Check for protected revisions
 function Get-ProtectedRevisions {
     $phrases = @("*do*not*delete*", "*don*t*delete*", "*delete*after*", "*keep*")
@@ -330,7 +303,6 @@ function Get-CurrentRevisions {
     $notCurrent = @()
     foreach ($bup in (Get-ProtectedRevisions)) {$notCurrent += "$($bup.Name)"}
     foreach ($bup in (Get-OldRevisions)) {$notCurrent += "$($bup.Name)"}
-    foreach ($bup in (Get-FailedRevisions)) {$notCurrent += "$($bup.Name)"}
     $result = @()
     foreach ($bup in Get-AllBackups) {
         if (-Not($bup.Name -in $notCurrent)) {$result += $bup}
@@ -441,15 +413,6 @@ function Remove-Revision($rev) {
     }
 
     return $revDeleted
-}
-
-# Remove an extra revision
-function Remove-ExtraRevision {
-    if ((Get-CurrentNumberofRevisions) -gt $preferredNumberofRevisions) {
-        if ((Get-FreeSpace) -lt ($expectedRevisionSize + $wsbDriveFreeSpaceBuffer)) {
-            Remove-Revision $(Get-OldestRevision 1)
-        }
-    }    
 }
 
 # Get the oldest current revision
