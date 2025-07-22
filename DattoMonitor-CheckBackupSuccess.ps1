@@ -21,7 +21,7 @@ if ([System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")) {
     $sysVar = [System.Environment]::GetEnvironmentVariable("weekend_backup", "Machine")
     if ($sysVar -ne "TRUE") {$skipWeekends = $true}
 } elseif ($env:WeekendBackup) {if ($env:WeekendBackup -eq "FALSE") {$skipWeekends = $true}}
-else {$skipWeekends = $false}
+else {$skipWeekends = $true}
 
 # Is it the weekend? Check for Friday's backup on Saturday, no need to check
 # backups on Monday.
