@@ -2,7 +2,7 @@
 # Starts a Windows Server Backup job.
 # DEFINE VARIABLES AND FUNCTIONS
 $hostname = $env:COMPUTERNAME
-$client = $env:ShortSiteName
+$client = $env:short_site_name
 
 function Get-Timestamp {Get-Date -Format "MM/dd/yyyy HH:mm:ss"}
 
@@ -89,5 +89,9 @@ Add-WBBackupTarget -Policy $policy -Target $backupLocation
 Add-WBVirtualMachine -Policy $policy -VirtualMachine $VMs
 Write-LogAndOutput "Starting Windows Server Backup..."
 Write-LogAndOutput
-$backupReport = Start-WBBackup -Policy $policy
-Write-LogAndOutput $backupReport -NoTimestamp
+
+Start-WBBackup -Policy $policy
+
+# Need to fix this reporting
+# $backupReport = Start-WBBackup -Policy $policy
+# Write-LogAndOutput $backupReport -NoTimestamp
