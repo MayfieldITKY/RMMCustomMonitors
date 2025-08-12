@@ -136,7 +136,6 @@ function BackupTheBackups {
     # if there are more than enough revisions and the backup drive will be at
     # least 95% full after the next backup, delete at least one extra revision
     # to prevent Datto alert.
-    <#
     $wsbDriveFivePercent = [Math]::Ceiling($wsbDriveSpace * 0.051)
     $extraSpaceNeeded = $wsbDriveFivePercent + $expectedRevisionSize
     if ((Get-FreeSpace) -lt $extraSpaceNeeded) {
@@ -157,8 +156,7 @@ function BackupTheBackups {
                 break
             } else {}
         }
-    } 
-    #>   
+    }  
 
     # report success - this should not trigger if there is a true failure. if the
     # last backup was successful, renamed correctly, and there is sufficient space
