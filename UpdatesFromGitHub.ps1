@@ -59,7 +59,7 @@ If (-Not(Test-Path $updateTempPath)) {
 # Set TLS version and get file
 Write-Output "Downloading current repository..."
 [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
-Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
+Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -UseBasicParsing -outfile $updateFilePath
 Start-Sleep 10
 
 # Compare the downloaded file to the last update file. If they are the same, no update is needed

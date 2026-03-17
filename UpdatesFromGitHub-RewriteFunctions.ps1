@@ -65,7 +65,7 @@ Deploying branch: $updateRepo
     # Set TLS version and get file
     Write-UpdateLogAndOutput "Downloading current repository..."
     [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11"
-    Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -outfile $updateFilePath
+    Invoke-WebRequest -Uri https://github.com/MayfieldITKY/RMMCustomMonitors/archive/refs/heads/$updateRepoFileName -UseBasicParsing -outfile $updateFilePath
     Start-Sleep 10
     # Wait a while to download for slow connections
     # ($waitTries + 1) * 10 = total wait time in seconds
